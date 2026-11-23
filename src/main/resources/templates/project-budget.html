@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Project Budget | Expense Tracker</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        :root { --ink: #17233c; --muted: #748198; --accent: #5667e8; --line: #e8edf5; }
+        html, body { min-height: 100%; overflow-x: hidden; }
+        body { min-height: 100vh; color: var(--ink); background: radial-gradient(ellipse at 75% -10%, rgba(107,125,255,.10), transparent 34%), #f5f7fb; font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+        .navbar { height: 68px; background: rgba(255,255,255,.96); border-bottom: 1px solid var(--line); }
+        .navbar-brand { color: var(--ink); letter-spacing: -.03em; }
+        .brand-mark { display: inline-flex; width: 34px; height: 34px; align-items: center; justify-content: center; margin-right: .55rem; border-radius: 11px; color: #fff; background: linear-gradient(135deg,#6576f5,#8b5cf6); font-weight: 800; }
+        .sidebar { width: 248px; top: 68px; height: calc(100vh - 68px); overflow-y: auto; border-color: var(--line) !important; }
+        .sidebar .nav-link { padding: .7rem .85rem; border-radius: .75rem; color: #66738b; font-weight: 500; }
+        .sidebar .nav-link:hover { color: var(--accent); background: #f5f6ff; }
+        .sidebar .nav-link.active { background: #eef0ff; color: #4b5bd4; font-weight: 650; }
+        .sidebar-label { color: #a0a9ba; font-size: .68rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+        .main-content { box-sizing: border-box; max-width: 100%; }
+        .page-heading h1 { font-weight: 750; letter-spacing: -.04em; }
+        .text-muted { color: var(--muted) !important; }
+        .card { border: 1px solid var(--line) !important; border-radius: 1rem; box-shadow: 0 5px 22px rgba(34,49,84,.045); }
+        .btn { border-radius: .7rem; font-weight: 600; }
+        .btn-primary { background: var(--accent); border-color: var(--accent); }
+        .btn-primary:hover { background: #4656d2; border-color: #4656d2; }
+        .btn-outline-light { color: #59667d; border-color: #dfe5ef; }
+        .form-control { min-height: 40px; border-color: #dfe5ef; border-radius: .65rem; }
+        .form-control:focus { border-color: #909bfa; box-shadow: 0 0 0 .2rem rgba(86,103,232,.12); }
+        .stat-card { height: 100%; padding: 1rem 1.1rem; }
+        .stat-label { color: var(--muted); font-size: .72rem; font-weight: 650; letter-spacing: .05em; text-transform: uppercase; }
+        .stat-value { margin-top: .25rem; font-size: 1.4rem; font-weight: 750; letter-spacing: -.04em; }
+        .budget-table-wrap { overflow: hidden; border: 1px solid var(--line); border-radius: 1rem; background: #fff; box-shadow: 0 5px 22px rgba(34,49,84,.045); }
+        .budget-table { min-width: 780px; margin-bottom: 0; }
+        .budget-table thead th { padding: .8rem 1rem; color: #78849a; background: #f8f9fc; border-bottom-color: var(--line); font-size: .7rem; letter-spacing: .06em; text-transform: uppercase; white-space: nowrap; }
+        .budget-table tbody td { padding: .55rem .85rem; border-color: #eff2f7; vertical-align: middle; }
+        .budget-table tfoot td { padding: .9rem 1rem; background: #f8f9fc; border-top: 1px solid var(--line); font-weight: 700; }
+        .budget-category { font-weight: 650; }
+        .amount-pill { display: inline-flex; min-width: 72px; justify-content: flex-end; font-variant-numeric: tabular-nums; }
+        .empty-budget { color: #9aa4b6; }
+        .justification-link { white-space: nowrap; font-size: .78rem; font-weight: 650; }
+        .budget-items-box { overflow: hidden; border: 1px solid var(--line); border-radius: .9rem; background: #fff; }
+        .budget-items-table { min-width: 480px; margin-bottom: 0; font-size: .82rem; }
+        .budget-items-table th { padding: .6rem .75rem; color: #78849a; background: #f8f9fc; border-bottom-color: var(--line); font-size: .67rem; letter-spacing: .05em; text-transform: uppercase; }
+        .budget-items-table td { padding: .45rem .75rem; border-color: #eff2f7; vertical-align: middle; }
+        .budget-items-table .form-control { min-height: 36px; }
+        .budget-item-actions { display: flex; justify-content: flex-end; gap: .35rem; white-space: nowrap; }
+        .budget-item-actions .btn { padding: .25rem .5rem; font-size: .72rem; }
+        .budget-modal-total { padding: .85rem 1rem; border-radius: .8rem; background: #f1f2ff; color: #4656d2; }
+        .legacy-budget-note { font-size: .75rem; }
+        @media (min-width: 768px) { .main-content { margin-left: 248px; width: calc(100% - 248px); } }
+        @media (max-width: 575.98px) { .navbar { height: 60px; } .main-content { padding-top: 1.25rem !important; } .page-heading { align-items: flex-start !important; gap: .75rem; } .page-heading .btn { white-space: nowrap; } }
+    </style>
+</head>
+<body>
+<nav class="navbar navbar-light sticky-top">
+    <div class="container-fluid">
+        <button class="navbar-toggler d-md-none me-2 border-0 shadow-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#sidebarMenu" aria-controls="sidebarMenu" aria-label="Open menu">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+        <a class="navbar-brand fw-semibold d-flex align-items-center" href="/"><span class="brand-mark">E</span>Expense Tracker</a>
+        <div class="d-flex align-items-center">
+            <img th:if="${ownerImageUrl != null and !#strings.isEmpty(ownerImageUrl)}"
+                 th:src="${ownerImageUrl}" class="rounded-circle me-2" width="32" height="32" alt="User">
+            <span class="fw-semibold d-none d-sm-inline" th:text="${username}">User</span>
+            <form class="ms-3" th:action="@{/logout}" method="post">
+                <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                <button type="submit" class="btn btn-sm btn-outline-light">Logout</button>
+            </form>
+        </div>
+    </div>
+</nav>
+
+<aside class="sidebar bg-white border-end position-fixed d-none d-md-block">
+    <div class="p-3">
+        <div class="sidebar-label px-3 mb-2 mt-1">Workspace</div>
+        <nav class="nav nav-pills flex-column gap-1">
+            <a class="nav-link" href="/dashboard">Dashboard</a>
+            <a class="nav-link" href="/expenses">Expenses</a>
+            <a class="nav-link active" aria-current="page" href="/projects">Projects</a>
+            <a class="nav-link" href="/categories">Categories</a>
+        </nav>
+    </div>
+</aside>
+<aside class="offcanvas offcanvas-start" tabindex="-1" id="sidebarMenu" aria-labelledby="sidebarMenuLabel">
+    <div class="offcanvas-header">
+        <h2 class="offcanvas-title fs-5" id="sidebarMenuLabel">Menu</h2>
+        <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+    </div>
+    <div class="offcanvas-body">
+        <nav class="nav nav-pills flex-column gap-1">
+            <a class="nav-link" href="/dashboard">Dashboard</a>
+            <a class="nav-link" href="/expenses">Expenses</a>
+            <a class="nav-link active" href="/projects">Projects</a>
+            <a class="nav-link" href="/categories">Categories</a>
+        </nav>
+    </div>
+</aside>
+
+<main class="main-content container-fluid px-3 px-md-4 py-4">
+    <div class="page-heading d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <div class="small text-muted mb-1">Project budget</div>
+            <h1 class="h3 mb-1" th:text="${project.name}">Project Name</h1>
+            <p class="text-muted mb-0">Plan category limits against actual spending.</p>
+        </div>
+        <a class="btn btn-outline-primary" href="/projects">Back to projects</a>
+    </div>
+
+    <div th:if="${successMessage}" class="alert alert-success alert-dismissible fade show" role="alert">
+        <span th:text="${successMessage}"></span>
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+    <div th:if="${errorMessage}" class="alert alert-danger alert-dismissible fade show" role="alert">
+        <span th:text="${errorMessage}"></span>
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-sm-4">
+            <div class="card stat-card">
+                <div class="stat-label">Total budget</div>
+                <div class="stat-value" id="budgetTotalPreview"
+                     th:text="${#numbers.formatDecimal(budgetTotal, 1, 'COMMA', 2, 'POINT')}">0.00</div>
+            </div>
+        </div>
+        <div class="col-sm-4">
+            <div class="card stat-card">
+                <div class="stat-label">Total spent</div>
+                <div class="stat-value" id="budgetTotalSpent"
+                     th:text="${#numbers.formatDecimal(totalSpent, 1, 'COMMA', 2, 'POINT')}">0.00</div>
+            </div>
+        </div>
+        <div class="col-sm-4">
+            <div class="card stat-card">
+                <div class="stat-label">Budget remaining</div>
+                <div class="stat-value" id="budgetTotalRemaining"
+                     th:classappend="${budgetRemaining.signum() < 0} ? 'text-danger' : 'text-success'"
+                     th:text="${#numbers.formatDecimal(budgetRemaining, 1, 'COMMA', 2, 'POINT')}">0.00</div>
+            </div>
+        </div>
+    </div>
+
+        <div class="budget-table-wrap">
+            <div class="d-flex justify-content-between align-items-center p-3 border-bottom">
+                <div>
+                    <h2 class="h6 fw-bold mb-1">Category allocations</h2>
+                    <div class="small text-muted">Add named items under Justification. Category and project budgets are calculated from item amounts.</div>
+                </div>
+                <span class="badge rounded-pill text-bg-light border" th:text="${budgetRows.size() + ' categories'}">0 categories</span>
+            </div>
+            <div class="table-responsive border-0 rounded-0 shadow-none">
+                <table class="table table-sm table-hover align-middle budget-table">
+                    <thead>
+                    <tr>
+                        <th>Category</th>
+                        <th class="text-end">Spent</th>
+                        <th class="text-end">Budget total</th>
+                        <th class="text-end">Remaining</th>
+                        <th>Justification</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    <tr th:if="${#lists.isEmpty(budgetRows)}">
+                        <td colspan="5" class="text-center text-muted py-4">Add categories to start setting budget limits.</td>
+                    </tr>
+                    <tr th:each="row : ${budgetRows}">
+                        <td>
+                            <span class="budget-category" th:text="${row.category}">Category</span>
+                        </td>
+                        <td class="text-end">
+                            <span class="amount-pill" th:text="${#numbers.formatDecimal(row.spent, 1, 'COMMA', 2, 'POINT')}">0.00</span>
+                        </td>
+                        <td class="text-end">
+                            <span class="amount-pill" th:classappend="${row.amount == null} ? 'empty-budget' : ''"
+                                  th:text="${row.amount == null ? '—' : #numbers.formatDecimal(row.amount, 1, 'COMMA', 2, 'POINT')}">—</span>
+                        </td>
+                        <td class="text-end">
+                            <span class="amount-pill row-remaining"
+                                  th:classappend="${row.amount == null ? 'empty-budget' : (row.remaining.signum() < 0 ? 'text-danger fw-semibold' : '')}"
+                                  th:text="${row.amount == null ? '—' : #numbers.formatDecimal(row.remaining, 1, 'COMMA', 2, 'POINT')}">—</span>
+                        </td>
+                        <td>
+                            <button type="button" class="btn btn-sm btn-outline-primary justification-link"
+                                    data-bs-toggle="modal" data-bs-target="#budgetItemsModal"
+                                    th:data-category="${row.category}"
+                                    th:data-legacy-amount="${row.amount}"
+                                    th:data-legacy-justification="${row.justification}">
+                                Justification
+                                <span class="badge rounded-pill text-bg-light border ms-1" th:text="${row.itemCount}">0</span>
+                            </button>
+                            <div class="d-none budget-row-item" th:each="item : ${row.items}"
+                                 th:data-item-name="${item.itemName}" th:data-item-amount="${item.amount}"></div>
+                            <div class="d-none legacy-budget-note" th:if="${#lists.isEmpty(row.items)}"
+                                 th:text="${row.justification}"></div>
+                        </td>
+                    </tr>
+                    </tbody>
+                    <tfoot>
+                    <tr>
+                        <td>Total</td>
+                        <td class="text-end" th:text="${#numbers.formatDecimal(totalSpent, 1, 'COMMA', 2, 'POINT')}">0.00</td>
+                        <td class="text-end" id="budgetTableTotal"
+                            th:text="${#numbers.formatDecimal(budgetTotal, 1, 'COMMA', 2, 'POINT')}">0.00</td>
+                        <td class="text-end" id="budgetTableRemaining"
+                            th:text="${#numbers.formatDecimal(budgetRemaining, 1, 'COMMA', 2, 'POINT')}">0.00</td>
+                    </tr>
+                    </tfoot>
+                </table>
+            </div>
+            <div class="d-flex justify-content-end gap-2 p-3 border-top">
+                <a class="btn btn-outline-secondary" href="/projects">Cancel</a>
+            </div>
+        </div>
+
+    <div class="modal fade" id="budgetItemsModal" tabindex="-1" aria-labelledby="budgetItemsModalTitle" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header border-0 pb-2">
+                    <div>
+                        <div class="small text-muted">Category budget breakdown</div>
+                        <h2 class="modal-title fs-5 fw-bold" id="budgetItemsModalTitle">Justification</h2>
+                    </div>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body pt-2">
+                    <p class="small text-muted">Add the items that make up this category budget. Only one row can be edited at a time; the category total is calculated from item amounts.</p>
+                    <form id="budgetItemsForm" th:action="@{/projects/{id}/budget/items(id=${project.id})}" method="post">
+                        <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                        <input type="hidden" name="category" id="budgetItemCategory">
+                        <div class="budget-items-box">
+                            <div class="d-flex justify-content-between align-items-center p-2 border-bottom">
+                                <span class="small text-muted fw-semibold">Breakdown items</span>
+                                <button type="button" class="btn btn-sm btn-outline-primary" id="addBudgetItem">
+                                    + Add item
+                                </button>
+                            </div>
+                            <div class="table-responsive border-0 rounded-0 shadow-none">
+                                <table class="table table-sm table-hover align-middle budget-items-table">
+                                    <thead>
+                                    <tr><th>Item</th><th class="text-end">Amount</th><th class="text-end">Actions</th></tr>
+                                    </thead>
+                                    <tbody id="budgetItemRows"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="form-text mt-2">Edit or finish the active row before saving the breakdown.</div>
+                        <div id="budgetItemPayload"></div>
+                        <div class="budget-modal-total d-flex justify-content-between align-items-center mt-3">
+                            <span class="small fw-semibold">Calculated category budget</span>
+                            <span class="fw-bold" id="categoryBudgetPreview">0.00</span>
+                        </div>
+                        <div class="d-flex justify-content-end gap-2 mt-4">
+                            <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                            <button type="submit" class="btn btn-primary px-4">Save breakdown</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    const budgetFormatter = new Intl.NumberFormat(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const itemRows = document.getElementById('budgetItemRows');
+    const itemPayload = document.getElementById('budgetItemPayload');
+    const addItemButton = document.getElementById('addBudgetItem');
+    const saveBreakdownButton = document.querySelector('#budgetItemsForm [type="submit"]');
+    let budgetItems = [];
+    let editingIndex = null;
+    let isNewItem = false;
+
+    function updateCategoryBudgetPreview() {
+        const amounts = budgetItems.map(item => Number(item.amount) || 0);
+        if (editingIndex !== null) {
+            const editingAmount = itemRows.querySelector('.editing-row [data-edit-amount]');
+            amounts[editingIndex] = editingAmount ? (Number(editingAmount.value) || 0) : 0;
+        }
+        const total = amounts.reduce((sum, amount) => sum + Math.round(amount * 100), 0) / 100;
+        document.getElementById('categoryBudgetPreview').textContent = budgetFormatter.format(total);
+        addItemButton.disabled = editingIndex !== null;
+        saveBreakdownButton.disabled = editingIndex !== null;
+    }
+
+    function renderBudgetItems() {
+        itemRows.replaceChildren();
+        if (!budgetItems.length) {
+            const emptyRow = document.createElement('tr');
+            const emptyCell = document.createElement('td');
+            emptyCell.colSpan = 3;
+            emptyCell.className = 'text-center text-muted py-3';
+            emptyCell.textContent = 'No items added. Use “Add item” to start this category breakdown.';
+            emptyRow.appendChild(emptyCell);
+            itemRows.appendChild(emptyRow);
+        }
+
+        budgetItems.forEach((item, index) => {
+            const row = document.createElement('tr');
+            if (editingIndex === index) {
+                row.className = 'editing-row';
+                const nameCell = document.createElement('td');
+                const nameInput = document.createElement('input');
+                nameInput.type = 'text';
+                nameInput.className = 'form-control form-control-sm';
+                nameInput.maxLength = 120;
+                nameInput.placeholder = 'e.g. Hotel stay';
+                nameInput.value = item.name || '';
+                nameInput.dataset.editName = 'true';
+                nameInput.setAttribute('aria-label', 'Budget item name');
+                nameCell.appendChild(nameInput);
+
+                const amountCell = document.createElement('td');
+                amountCell.className = 'text-end';
+                const amountInput = document.createElement('input');
+                amountInput.type = 'number';
+                amountInput.className = 'form-control form-control-sm text-end';
+                amountInput.min = '0.01';
+                amountInput.max = '999999999999.99';
+                amountInput.step = '0.01';
+                amountInput.placeholder = '0.00';
+                amountInput.value = item.amount || '';
+                amountInput.dataset.editAmount = 'true';
+                amountInput.setAttribute('aria-label', 'Budget item amount');
+                amountInput.addEventListener('input', updateCategoryBudgetPreview);
+                amountCell.appendChild(amountInput);
+
+                const actionCell = document.createElement('td');
+                const actions = document.createElement('div');
+                actions.className = 'budget-item-actions';
+                const doneButton = document.createElement('button');
+                doneButton.type = 'button';
+                doneButton.className = 'btn btn-sm btn-primary';
+                doneButton.textContent = 'Done';
+                doneButton.addEventListener('click', () => finishEditing(index));
+                const cancelButton = document.createElement('button');
+                cancelButton.type = 'button';
+                cancelButton.className = 'btn btn-sm btn-outline-secondary';
+                cancelButton.textContent = 'Cancel';
+                cancelButton.addEventListener('click', cancelEditing);
+                actions.append(doneButton, cancelButton);
+                actionCell.appendChild(actions);
+                row.append(nameCell, amountCell, actionCell);
+                itemRows.appendChild(row);
+                nameInput.focus();
+                return;
+            }
+
+            const nameCell = document.createElement('td');
+            nameCell.textContent = item.name;
+            const amountCell = document.createElement('td');
+            amountCell.className = 'text-end fw-semibold';
+            amountCell.textContent = budgetFormatter.format(Number(item.amount) || 0);
+            const actionCell = document.createElement('td');
+            const actions = document.createElement('div');
+            actions.className = 'budget-item-actions';
+            const editButton = document.createElement('button');
+            editButton.type = 'button';
+            editButton.className = 'btn btn-sm btn-outline-primary';
+            editButton.textContent = 'Edit';
+            editButton.disabled = editingIndex !== null;
+            editButton.addEventListener('click', () => startEditing(index, false));
+            const removeButton = document.createElement('button');
+            removeButton.type = 'button';
+            removeButton.className = 'btn btn-sm btn-outline-danger';
+            removeButton.textContent = 'Remove';
+            removeButton.disabled = editingIndex !== null;
+            removeButton.addEventListener('click', () => {
+                budgetItems.splice(index, 1);
+                renderBudgetItems();
+                updateCategoryBudgetPreview();
+            });
+            actions.append(editButton, removeButton);
+            actionCell.appendChild(actions);
+            row.append(nameCell, amountCell, actionCell);
+            itemRows.appendChild(row);
+        });
+        updateCategoryBudgetPreview();
+    }
+
+    function startEditing(index, adding) {
+        editingIndex = index;
+        isNewItem = adding;
+        renderBudgetItems();
+    }
+
+    function finishEditing(index) {
+        const row = itemRows.querySelector('.editing-row');
+        const nameInput = row.querySelector('[data-edit-name]');
+        const amountInput = row.querySelector('[data-edit-amount]');
+        const itemName = nameInput.value.trim();
+        const itemAmount = Number(amountInput.value);
+        if (!itemName || itemName.length > 120) {
+            nameInput.setCustomValidity('Enter an item name up to 120 characters.');
+            nameInput.reportValidity();
+            nameInput.addEventListener('input', () => nameInput.setCustomValidity(''), { once: true });
+            return;
+        }
+        if (!Number.isFinite(itemAmount) || !amountInput.checkValidity()) {
+            amountInput.reportValidity();
+            return;
+        }
+        budgetItems[index] = { name: itemName, amount: amountInput.value };
+        editingIndex = null;
+        isNewItem = false;
+        renderBudgetItems();
+    }
+
+    function cancelEditing() {
+        if (isNewItem) {
+            budgetItems.splice(editingIndex, 1);
+        }
+        editingIndex = null;
+        isNewItem = false;
+        renderBudgetItems();
+    }
+
+    addItemButton.addEventListener('click', () => {
+        budgetItems.push({ name: '', amount: '' });
+        startEditing(budgetItems.length - 1, true);
+    });
+
+    document.getElementById('budgetItemsForm').addEventListener('submit', event => {
+        if (editingIndex !== null) {
+            event.preventDefault();
+            return;
+        }
+        itemPayload.replaceChildren();
+        budgetItems.forEach(item => {
+            const nameInput = document.createElement('input');
+            nameInput.type = 'hidden';
+            nameInput.name = 'itemName';
+            nameInput.value = item.name;
+            const amountInput = document.createElement('input');
+            amountInput.type = 'hidden';
+            amountInput.name = 'itemAmount';
+            amountInput.value = item.amount;
+            itemPayload.append(nameInput, amountInput);
+        });
+    });
+
+    document.querySelectorAll('[data-bs-target="#budgetItemsModal"]').forEach(button => {
+        button.addEventListener('click', () => {
+            const category = button.dataset.category;
+            document.getElementById('budgetItemsModalTitle').textContent = 'Justification - ' + category;
+            document.getElementById('budgetItemCategory').value = category;
+            budgetItems = [];
+            editingIndex = null;
+            isNewItem = false;
+
+            const savedItems = Array.from(button.closest('td').querySelectorAll('.budget-row-item'));
+            if (savedItems.length) {
+                budgetItems = savedItems.map(item => ({
+                    name: item.dataset.itemName,
+                    amount: item.dataset.itemAmount
+                }));
+            } else {
+                const legacyReason = button.closest('td').querySelector('.legacy-budget-note');
+                const legacyAmount = button.dataset.legacyAmount;
+                if (legacyReason && legacyReason.textContent.trim() && legacyAmount) {
+                    budgetItems.push({ name: legacyReason.textContent.trim(), amount: legacyAmount });
+                } else if (legacyAmount) {
+                    budgetItems.push({ name: 'Existing budget', amount: legacyAmount });
+                }
+            }
+            renderBudgetItems();
+        });
+    });
+</script>
+</body>
+</html>

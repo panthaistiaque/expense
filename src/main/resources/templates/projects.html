@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Projects | Expense Tracker</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        :root { --ink: #17233c; --muted: #748198; --accent: #5667e8; --line: #e8edf5; --surface: #fff; }
+        html, body { min-height: 100%; overflow-x: hidden; }
+        body { min-height: 100vh; color: var(--ink); background: radial-gradient(ellipse at 75% -10%, rgba(107,125,255,.10), transparent 34%), #f5f7fb !important; font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+        .navbar { height: 68px; background: rgba(255,255,255,.96) !important; border-bottom: 1px solid var(--line); }
+        .navbar-brand { color: var(--ink) !important; letter-spacing: -.03em; }
+        .brand-mark { display: inline-flex; width: 34px; height: 34px; align-items: center; justify-content: center; margin-right: .55rem; border-radius: 11px; color: #fff; background: linear-gradient(135deg,#6576f5,#8b5cf6); font-weight: 800; }
+        .user-label { color: #59667d; }
+        .sidebar { width: 248px; top: 68px; height: calc(100vh - 68px); overflow-y: auto; border-color: var(--line) !important; }
+        .sidebar .nav-link { padding: .7rem .85rem; border-radius: .75rem; color: #66738b; font-weight: 500; transition: .18s ease; }
+        .sidebar .nav-link:hover { color: var(--accent); background: #f5f6ff; }
+        .sidebar .nav-link.active { background: #eef0ff; color: #4b5bd4; font-weight: 650; }
+        .sidebar-label { color: #a0a9ba; font-size: .68rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+        .main-content { box-sizing: border-box; max-width: 100%; }
+        .page-heading h1 { letter-spacing: -.04em; font-weight: 700; }
+        .page-heading p, .text-muted { color: var(--muted) !important; }
+        .card, .table-responsive { border: 1px solid var(--line) !important; border-radius: 1rem; box-shadow: 0 5px 22px rgba(34,49,84,.045) !important; }
+        .card-header, .card-footer { border-color: var(--line); }
+        .form-select, .form-control { min-height: 44px; border-color: #dfe5ef; border-radius: .7rem; }
+        .form-select:focus, .form-control:focus { border-color: #909bfa; box-shadow: 0 0 0 .2rem rgba(86,103,232,.12); }
+        .btn { border-radius: .7rem; font-weight: 600; }
+        .btn-primary { background: var(--accent); border-color: var(--accent); }
+        .btn-primary:hover { background: #4656d2; border-color: #4656d2; }
+        .btn-outline-light { color: #59667d; border-color: #dfe5ef; }
+        .modal-content { border: 0; border-radius: 1rem; box-shadow: 0 24px 70px rgba(25,36,64,.18); }
+        .offcanvas { border: 0; }
+        .page-heading { padding: .5rem 0 .25rem; }
+        .page-heading h1 { font-size: clamp(1.55rem, 2vw, 2rem); }
+        .project-card { height: 100%; overflow: hidden; transition: transform .18s ease, box-shadow .18s ease; }
+        .project-card::before { content: ""; display: block; height: 3px; background: linear-gradient(90deg,#6576f5,#8b5cf6 55%,#c084fc); }
+        .project-card:hover { transform: translateY(-3px); box-shadow: 0 14px 34px rgba(34,49,84,.10) !important; }
+        .project-card .card-body { padding: 1.15rem; }
+        .project-owner-avatar { flex: 0 0 auto; object-fit: cover; box-shadow: 0 0 0 3px #f0f2ff; }
+        .project-summary { padding: .85rem; border: 1px solid #eef0f7; border-radius: .9rem; background: linear-gradient(145deg,#fafbff,#f7f8fd); }
+        .project-summary-label { color: var(--muted); font-size: .72rem; font-weight: 650; letter-spacing: .04em; text-transform: uppercase; }
+        .project-total { color: var(--ink); font-size: 1.3rem; font-weight: 750; letter-spacing: -.04em; }
+        .entry-count { color: #5362d3; background: #eef0ff; font-weight: 650; }
+        .budget-overview { padding: .9rem; margin-top: .9rem; border: 1px solid #e5e8ff; border-radius: .9rem; background: linear-gradient(145deg,#fbfbff,#f3f5ff); }
+        .budget-overview-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: .6rem; }
+        .budget-overview-label { color: var(--muted); font-size: .68rem; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
+        .budget-total { margin-top: .1rem; color: #3644b9; font-size: 1.15rem; font-weight: 750; letter-spacing: -.035em; }
+        .budget-status { flex: 0 0 auto; padding: .3rem .55rem; border: 1px solid #d5f0e2; border-radius: 99px; color: #18794e; background: #edfbf3; font-size: .65rem; font-weight: 700; }
+        .budget-status.over-budget { border-color: #ffd8cf; color: #b93825; background: #fff1ed; }
+        .budget-remaining-row { display: flex; justify-content: space-between; align-items: center; gap: .5rem; margin-top: .65rem; padding-top: .6rem; border-top: 1px solid #e8eaff; font-size: .76rem; }
+        .budget-progress-caption { display: flex; justify-content: space-between; margin-top: .65rem; color: var(--muted); font-size: .68rem; }
+        .budget-progress { height: 6px; margin-top: .3rem; background: #e4e7f7; border-radius: 99px; }
+        .budget-progress .progress-bar { background: linear-gradient(90deg,#6676f5,#8b5cf6); border-radius: 99px; }
+        .budget-progress.over-budget .progress-bar { background: linear-gradient(90deg,#f59e0b,#ef4444); }
+        .budget-breakdown-trigger { display: flex; width: 100%; justify-content: space-between; align-items: center; gap: .4rem; padding: .65rem 0 0; color: #4656cc; font-size: .76rem; font-weight: 700; text-align: left; text-decoration: none; }
+        .budget-breakdown-trigger:hover { color: #3444b9; }
+        .budget-breakdown-trigger .breakdown-arrow { flex: 0 0 auto; font-size: 1.05rem; transition: transform .18s ease; }
+        .budget-breakdown-trigger:hover .breakdown-arrow { transform: translateX(3px); }
+        .budget-category-count { color: var(--muted); font-size: .68rem; font-weight: 550; }
+        .budget-modal-summary { height: 100%; padding: .9rem 1rem; border: 1px solid var(--line); border-radius: .9rem; background: #f8f9fd; }
+        .budget-modal-summary-label { color: var(--muted); font-size: .68rem; font-weight: 650; letter-spacing: .05em; text-transform: uppercase; }
+        .budget-modal-summary-value { margin-top: .2rem; color: var(--ink); font-size: 1.15rem; font-weight: 750; letter-spacing: -.03em; }
+        .budget-modal-progress { height: 7px; background: #e4e7f7; border-radius: 99px; }
+        .budget-modal-progress .progress-bar { background: linear-gradient(90deg,#6676f5,#8b5cf6); border-radius: 99px; }
+        .budget-modal-progress.over-budget .progress-bar { background: linear-gradient(90deg,#f59e0b,#ef4444); }
+        .budget-breakdown-table { min-width: 700px; margin-bottom: 0; font-size: .82rem; }
+        .budget-breakdown-table th { padding: .75rem .85rem; color: #78849a; background: #f8f9fc; border-bottom-color: var(--line); font-size: .68rem; letter-spacing: .05em; text-transform: uppercase; white-space: nowrap; }
+        .budget-breakdown-table td { padding: .7rem .85rem; border-color: #eff2f7; vertical-align: middle; }
+        .budget-item-details-row td { padding: .35rem .75rem .8rem; background: #fbfcff; }
+        .budget-item-details { max-height: 240px; overflow-y: auto; border: 1px solid var(--line); border-radius: .65rem; background: #fff; }
+        .budget-item-details table { margin-bottom: 0; font-size: .76rem; }
+        .budget-item-details th { position: sticky; top: 0; z-index: 1; padding: .45rem .65rem; background: #f8f9fc; color: #78849a; font-size: .64rem; text-transform: uppercase; }
+        .budget-item-details td { padding: .4rem .65rem; }
+        .project-card .card-footer { padding: .8rem 1rem; background: #fff; }
+        .project-actions { display: flex; flex-wrap: wrap; gap: .45rem; }
+        .project-actions .btn { flex: 1 1 auto; min-width: 64px; }
+        .project-actions .project-open { flex-grow: 2; }
+        .project-contributor-list { max-height: 230px; overflow-y: auto; }
+        .project-contributor-row { gap: .75rem; }
+        .project-contributor-row > div { min-width: 0; }
+        .project-contributor-email { overflow-wrap: anywhere; }
+        @media (max-width: 575.98px) {
+            .navbar { height: 60px; }
+            .main-content { padding-top: 1.25rem !important; }
+            .page-heading { align-items: flex-start !important; gap: 1rem; }
+            .project-actions .btn { flex: 1 1 28%; }
+        }
+        @media (min-width: 768px) {
+            .main-content { margin-left: 248px; width: calc(100% - 248px); }
+        }
+    </style>
+</head>
+<body>
+<nav class="navbar navbar-light sticky-top">
+    <div class="container-fluid">
+        <button class="navbar-toggler d-md-none me-2 border-0 shadow-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#sidebarMenu" aria-label="Open menu">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+        <a class="navbar-brand fw-semibold d-flex align-items-center" href="/"><span class="brand-mark">E</span>Expense Tracker</a>
+        <div class="d-flex align-items-center user-label">
+            <span class="small me-2 d-none d-sm-inline">Welcome,</span>
+            <img th:if="${ownerImageUrl != null and !#strings.isEmpty(ownerImageUrl)}"
+                 th:src="${ownerImageUrl}"
+                 class="rounded-circle me-2"
+                 width="32" height="32"
+                 alt="User">
+            <span class="fw-semibold" th:text="${username}">User</span>
+            <form class="ms-3" th:action="@{/logout}" method="post">
+                <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                <button type="submit" class="btn btn-sm btn-outline-light">Logout</button>
+            </form>
+        </div>
+    </div>
+</nav>
+
+<aside class="sidebar bg-white border-end position-fixed d-none d-md-block">
+    <div class="p-3">
+        <div class="sidebar-label px-3 mb-2 mt-1">Workspace</div>
+        <nav class="nav nav-pills flex-column gap-1">
+            <a class="nav-link" href="/dashboard">Dashboard</a>
+            <a class="nav-link" href="/expenses">Expenses</a>
+            <a class="nav-link active" aria-current="page" href="/projects">Projects</a>
+            <a class="nav-link" href="/categories">Categories</a>
+        </nav>
+    </div>
+</aside>
+
+<aside class="offcanvas offcanvas-start" tabindex="-1" id="sidebarMenu" aria-labelledby="sidebarMenuLabel">
+    <div class="offcanvas-header">
+        <h2 class="offcanvas-title fs-5" id="sidebarMenuLabel">Menu</h2>
+        <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+    </div>
+    <div class="offcanvas-body">
+        <nav class="nav nav-pills flex-column gap-1">
+            <a class="nav-link" href="/dashboard">Dashboard</a>
+            <a class="nav-link" href="/expenses">Expenses</a>
+            <a class="nav-link active" href="/projects">Projects</a>
+            <a class="nav-link" href="/categories">Categories</a>
+        </nav>
+    </div>
+</aside>
+
+<main class="main-content container-fluid px-3 px-md-4 py-4">
+    <div class="page-heading d-flex justify-content-between align-items-center mb-4">
+        <div><h1 class="h3 mb-1">Projects</h1><p class="mb-0">Organize shared spending and contributors.</p></div>
+        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#projectModal">
+            New Project
+        </button>
+    </div>
+
+    <div th:if="${successMessage}" class="alert alert-success alert-dismissible fade show" role="alert">
+        <span th:text="${successMessage}"></span>
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+    <div th:if="${errorMessage}" class="alert alert-danger alert-dismissible fade show" role="alert">
+        <span th:text="${errorMessage}"></span>
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+
+    <div th:if="${#lists.isEmpty(projectCards)}" class="card text-center py-5 px-3">
+        <div class="mx-auto mb-3 rounded-circle d-flex align-items-center justify-content-center"
+             style="width:60px;height:60px;background:#eef0ff;color:#5667e8;font-size:1.5rem;font-weight:700">+</div>
+        <h2 class="h5 mb-2">Start with a project</h2>
+        <p class="text-muted mb-3">Create a project to organize expenses, set category budgets, and invite contributors.</p>
+        <button type="button" class="btn btn-primary mx-auto" data-bs-toggle="modal" data-bs-target="#projectModal">Create Project</button>
+    </div>
+
+    <div class="row g-3">
+        <div class="col-sm-6 col-lg-4 col-xl-3" th:each="entry : ${projectCards}">
+            <div class="card project-card border-0 h-100">
+                <div class="card-body">
+                    <div class="d-flex align-items-center mb-3">
+                        <img th:if="${entry.ownerImageUrl != null and !#strings.isEmpty(entry.ownerImageUrl)}"
+                             th:src="${entry.ownerImageUrl}"
+                             class="rounded-circle me-2 project-owner-avatar"
+                             width="36" height="36"
+                             alt="Owner">
+                        <div th:if="${entry.ownerImageUrl == null or #strings.isEmpty(entry.ownerImageUrl)}"
+                             class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center me-2 project-owner-avatar"
+                             style="width:36px;height:36px"
+                             th:text="${#strings.substring(entry.ownerName == null ? 'O' : entry.ownerName, 0, 1)}">O</div>
+                        <div class="overflow-hidden">
+                            <h2 class="h5 card-title text-truncate mb-0" th:text="${entry.name}">Project Name</h2>
+                            <div class="small text-muted text-truncate" th:text="${entry.ownerName}">Owner</div>
+                        </div>
+                    </div>
+                    <div class="project-summary d-flex justify-content-between align-items-end mt-3">
+                        <div>
+                            <div class="project-summary-label">Total spent</div>
+                            <div class="project-total"
+                                 th:text="${#numbers.formatDecimal(entry.total, 1, 'COMMA', 2, 'POINT')}">0.00</div>
+                        </div>
+                        <span class="badge rounded-pill entry-count"
+                              th:text="${entry.count + ' entries'}">0 entries</span>
+                    </div>
+                    <div class="budget-overview" th:if="${entry.budgetTotal != null}">
+                        <div class="budget-overview-heading">
+                            <div>
+                                <div class="budget-overview-label">Project budget</div>
+                                <div class="budget-total"
+                                     th:text="${#numbers.formatDecimal(entry.budgetTotal, 1, 'COMMA', 2, 'POINT')}">0.00</div>
+                            </div>
+                            <span class="budget-status"
+                                  th:classappend="${entry.budgetRemaining.signum() < 0} ? 'over-budget' : ''"
+                                  th:text="${entry.budgetRemaining.signum() < 0} ? 'Over budget' : 'On track'">On track</span>
+                        </div>
+                        <div class="budget-remaining-row">
+                            <span class="text-muted">Remaining</span>
+                            <span class="fw-semibold"
+                                  th:classappend="${entry.budgetRemaining.signum() < 0} ? 'text-danger' : 'text-success'"
+                                  th:text="${#numbers.formatDecimal(entry.budgetRemaining, 1, 'COMMA', 2, 'POINT')}">0.00</span>
+                        </div>
+                        <div class="budget-progress-caption">
+                            <span>Budget used</span>
+                            <span class="fw-semibold" th:text="${entry.budgetPercent + '%'}">0%</span>
+                        </div>
+                        <div class="progress budget-progress"
+                             th:classappend="${entry.budgetRemaining.signum() < 0} ? 'over-budget' : ''"
+                             role="progressbar"
+                             aria-label="Project budget spent"
+                             th:attr="aria-valuenow=${entry.budgetPercent},aria-valuemin=0,aria-valuemax=100">
+                            <div class="progress-bar" th:style="|width: ${entry.budgetPercent}%|"></div>
+                        </div>
+                        <button type="button" class="btn btn-link budget-breakdown-trigger"
+                                data-bs-toggle="modal" data-bs-target="#budgetBreakdownModal"
+                                th:data-project-name="${entry.name}"
+                                th:data-budget-total="${entry.budgetTotal}"
+                                th:data-spent-total="${entry.total}"
+                                th:data-budget-remaining="${entry.budgetRemaining}"
+                                th:data-budget-percent="${entry.budgetPercent}"
+                                th:data-category-count="${entry.budgetLines.size()}">
+                            <span>View category details</span>
+                            <span class="budget-category-count"
+                                  th:text="${entry.budgetLines.size() == 1 ? '1 category' : entry.budgetLines.size() + ' categories'}">0 categories</span>
+                            <span class="breakdown-arrow" aria-hidden="true">→</span>
+                        </button>
+                    </div>
+                    <div class="small text-muted mt-3" th:if="${entry.budgetTotal == null}">
+                        <span class="badge rounded-pill text-bg-light border me-1">Optional</span>No budget set
+                    </div>
+                    <span class="d-none budget-line" th:each="line : ${entry.budgetLines}"
+                          th:data-category="${line.category}" th:data-amount="${line.amount}"
+                          th:data-spent="${line.spent}" th:data-remaining="${line.remaining}"
+                          th:data-justification="${line.justification}">
+                        <span class="budget-item" th:each="item : ${line.items}"
+                              th:data-item-name="${item.itemName}" th:data-item-amount="${item.amount}"></span>
+                    </span>
+                    <div class="d-flex align-items-center mt-3" th:if="${!#lists.isEmpty(entry.contributors)}">
+                        <span class="small text-muted me-2">Contributors:</span>
+                        <span th:each="contributor, status : ${entry.contributors}" class="me-1"
+                              th:title="${contributor.name}">
+                            <img th:if="${contributor.imageUrl != null and !#strings.isEmpty(contributor.imageUrl)}"
+                                 th:src="${contributor.imageUrl}"
+                                 class="rounded-circle"
+                                 width="28" height="28"
+                                 th:alt="${contributor.name}">
+                            <span th:if="${contributor.imageUrl == null or #strings.isEmpty(contributor.imageUrl)}"
+                                  class="rounded-circle bg-secondary text-white d-inline-flex align-items-center justify-content-center"
+                                  style="width:28px;height:28px"
+                                  th:text="${#strings.substring(contributor.name, 0, 1)}">C</span>
+                        </span>
+                    </div>
+                    <div class="d-none" th:each="contributor : ${entry.contributors}">
+                        <span class="project-contributor-data"
+                              th:data-contributor-id="${contributor.id}"
+                              th:data-contributor-name="${contributor.name}"
+                              th:data-contributor-email="${contributor.email}"></span>
+                    </div>
+                </div>
+                <div class="card-footer border-0">
+                    <div class="project-actions">
+                    <a class="btn btn-sm btn-outline-primary project-open"
+                       th:href="@{/expenses(project=${entry.name})}">Open</a>
+                    <button type="button"
+                            class="btn btn-sm btn-primary"
+                            data-bs-toggle="modal"
+                            data-bs-target="#projectExpenseModal"
+                            th:data-project-name="${entry.name}">
+                        + Expense
+                    </button>
+                    <button th:if="${entry.id != null and entry.ownerSubject == currentOwnerSubject}"
+                            type="button"
+                            class="btn btn-sm btn-outline-secondary"
+                            data-bs-toggle="modal"
+                            data-bs-target="#editProjectModal"
+                            th:data-project-id="${entry.id}"
+                            th:data-project-name="${entry.name}">
+                        Edit
+                    </button>
+                    <a th:if="${entry.id != null and entry.ownerSubject == currentOwnerSubject}"
+                            class="btn btn-sm btn-outline-primary"
+                            th:href="@{/projects/{id}/budget(id=${entry.id})}"
+                            target="_blank"
+                            rel="noopener">
+                        Budget
+                    </a>
+                    <button th:if="${entry.id != null and entry.ownerSubject == currentOwnerSubject}"
+                            type="button"
+                            class="btn btn-sm btn-outline-success"
+                            data-bs-toggle="modal"
+                            data-bs-target="#contributorModal"
+                            th:data-project-id="${entry.id}"
+                            th:data-project-name="${entry.name}"
+                            title="Manage project contributors"
+                            aria-label="Manage project contributors">
+                        Contributors
+                    </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="budgetBreakdownModal" tabindex="-1" aria-labelledby="budgetBreakdownTitle" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header border-0 pb-2">
+                    <div>
+                        <div class="small text-muted">Budget overview</div>
+                        <h2 class="modal-title fs-5 fw-bold" id="budgetBreakdownTitle">Category budget details</h2>
+                    </div>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body pt-2">
+                    <div class="row g-2 mb-3">
+                        <div class="col-12 col-sm-4">
+                            <div class="budget-modal-summary">
+                                <div class="budget-modal-summary-label">Budget</div>
+                                <div class="budget-modal-summary-value" id="breakdownBudgetTotal">0.00</div>
+                            </div>
+                        </div>
+                        <div class="col-12 col-sm-4">
+                            <div class="budget-modal-summary">
+                                <div class="budget-modal-summary-label">Spent</div>
+                                <div class="budget-modal-summary-value" id="breakdownSpentTotal">0.00</div>
+                            </div>
+                        </div>
+                        <div class="col-12 col-sm-4">
+                            <div class="budget-modal-summary">
+                                <div class="budget-modal-summary-label">Remaining</div>
+                                <div class="budget-modal-summary-value" id="breakdownRemaining">0.00</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center small mb-1">
+                        <span class="text-muted">Budget used</span>
+                        <span class="fw-semibold" id="breakdownPercent">0%</span>
+                    </div>
+                    <div class="progress budget-modal-progress mb-4" id="breakdownProgress"
+                         role="progressbar" aria-label="Project budget spent" aria-valuemin="0" aria-valuemax="100">
+                        <div class="progress-bar" id="breakdownProgressBar"></div>
+                    </div>
+                    <div class="table-responsive border rounded-3" id="budgetBreakdownTableWrap">
+                        <table class="table table-sm table-hover align-middle budget-breakdown-table">
+                            <thead>
+                            <tr>
+                                <th>Category</th>
+                                <th class="text-end">Budget</th>
+                                <th class="text-end">Spent</th>
+                                <th class="text-end">Remaining</th>
+                                <th>Status</th>
+                                <th>Breakdown</th>
+                            </tr>
+                            </thead>
+                            <tbody id="budgetBreakdownRows"></tbody>
+                        </table>
+                    </div>
+                    <div class="text-center text-muted py-4 d-none" id="budgetBreakdownEmpty">
+                        No category budgets have been set for this project.
+                    </div>
+                </div>
+                <div class="modal-footer border-0 pt-0">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="projectModal" tabindex="-1" aria-labelledby="projectModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2 class="modal-title fs-5" id="projectModalLabel">New Project</h2>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form th:action="@{/projects}" th:object="${project}" method="post">
+                        <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                        <label for="projectNameEntry" class="form-label">Project Name</label>
+                        <input type="text" class="form-control" th:field="*{name}" th:errorclass="is-invalid" id="projectNameEntry" placeholder="November 2026" required>
+                        <div class="invalid-feedback" th:errors="*{name}"></div>
+                        <div class="d-flex justify-content-end gap-2 mt-4">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                            <button type="submit" class="btn btn-primary">Save Project</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="projectExpenseModal" tabindex="-1" aria-labelledby="projectExpenseModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2 class="modal-title fs-5" id="projectExpenseModalLabel">Add Project Expense</h2>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form th:action="@{/expenses(fromProject=true)}" th:object="${expense}" method="post">
+                        <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                        <input type="hidden" name="fromProject" value="true">
+                        <div class="mb-3">
+                            <label for="projectExpenseProject" class="form-label">Project</label>
+                            <select class="form-select" th:field="*{projectName}" id="projectExpenseProject" required>
+                                <option value="">Choose project</option>
+                                <option th:each="projectName : ${projects}"
+                                        th:value="${projectName.name}"
+                                        th:text="${projectName.name}"></option>
+                            </select>
+                            <div class="invalid-feedback" th:errors="*{projectName}"></div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="projectExpenseDate" class="form-label">Expense Date</label>
+                            <input type="date" class="form-control" th:field="*{expenseDate}" th:errorclass="is-invalid" id="projectExpenseDate" required>
+                            <div class="invalid-feedback" th:errors="*{expenseDate}"></div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="projectExpenseAmount" class="form-label">Amount</label>
+                            <input type="number" step="0.01" min="0.01" class="form-control" th:field="*{amount}" th:errorclass="is-invalid" id="projectExpenseAmount" placeholder="0.00" required>
+                            <div class="invalid-feedback" th:errors="*{amount}"></div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="projectExpenseParticulars" class="form-label">Particulars</label>
+                            <input type="text" class="form-control" th:field="*{particulars}" th:errorclass="is-invalid" id="projectExpenseParticulars" placeholder="Description" required>
+                            <div class="invalid-feedback" th:errors="*{particulars}"></div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="projectExpenseCategory" class="form-label">Category</label>
+                            <select class="form-select" th:field="*{category}" th:errorclass="is-invalid" id="projectExpenseCategory" required>
+                                <option value="">Choose category</option>
+                                <option th:each="categoryName : ${categories}"
+                                        th:value="${categoryName}"
+                                        th:text="${categoryName}"></option>
+                            </select>
+                            <div class="invalid-feedback" th:errors="*{category}"></div>
+                        </div>
+                        <div class="d-flex justify-content-end gap-2">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                            <button type="submit" class="btn btn-primary">Save Expense</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="editProjectModal" tabindex="-1" aria-labelledby="editProjectModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2 class="modal-title fs-5" id="editProjectModalLabel">Edit Project</h2>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="editProjectForm" method="post">
+                        <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                        <label for="editProjectName" class="form-label">Project Name</label>
+                        <input type="text" class="form-control" id="editProjectName" name="name" required>
+                        <div class="d-flex justify-content-end gap-2 mt-4">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                            <button type="submit" class="btn btn-primary">Update</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="contributorModal" tabindex="-1" aria-labelledby="contributorModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2 class="modal-title fs-5" id="contributorModalLabel">Manage Contributors</h2>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <section class="mb-4" aria-labelledby="projectContributorListTitle">
+                        <div class="d-flex align-items-center justify-content-between mb-2">
+                            <h3 class="h6 mb-0" id="projectContributorListTitle">Current contributors</h3>
+                            <span class="badge rounded-pill text-bg-light border" id="projectContributorCount">0</span>
+                        </div>
+                        <div class="list-group project-contributor-list" id="projectContributorList"></div>
+                        <div class="small text-muted py-2 d-none" id="noProjectContributors">
+                            No contributors have been added to this project.
+                        </div>
+                    </section>
+                    <hr>
+                    <div class="small fw-semibold mb-3">Add a contributor</div>
+                    <input type="hidden" id="contributorCsrfToken"
+                           th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                    <form id="contributorForm" method="post">
+                        <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                        <div class="mb-3">
+                            <label for="contributorName" class="form-label">Name</label>
+                            <input type="text" class="form-control" id="contributorName" name="name" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="contributorEmail" class="form-label">Email</label>
+                            <input type="email" class="form-control" id="contributorEmail" name="email" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="contributorImage" class="form-label">Image URL (optional)</label>
+                            <input type="url" class="form-control" id="contributorImage" name="imageUrl" placeholder="https://...">
+                        </div>
+                        <div class="d-flex justify-content-end gap-2">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                            <button type="submit" class="btn btn-success">Add Contributor</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script th:inline="javascript">
+    const openProjectModal = /*[[${openProjectModal == true}]]*/ false;
+    if (openProjectModal) {
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('projectModal')).show();
+    }
+
+    const openProjectExpenseModal = /*[[${openProjectExpenseModal == true}]]*/ false;
+    if (openProjectExpenseModal) {
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('projectExpenseModal')).show();
+    }
+
+    document.querySelectorAll('[data-bs-target="#projectExpenseModal"]').forEach(button => {
+        button.addEventListener('click', () => {
+            const projectSelect = document.getElementById('projectExpenseProject');
+            projectSelect.value = button.dataset.projectName;
+            document.getElementById('projectExpenseModalLabel').textContent =
+                'Add Expense - ' + button.dataset.projectName;
+        });
+    });
+
+    const breakdownNumberFormat = new Intl.NumberFormat(undefined, {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    });
+
+    document.querySelectorAll('[data-bs-target="#budgetBreakdownModal"]').forEach(button => {
+        button.addEventListener('click', () => {
+            const card = button.closest('.project-card');
+            const totalBudget = Number(button.dataset.budgetTotal) || 0;
+            const totalSpent = Number(button.dataset.spentTotal) || 0;
+            const totalRemaining = Number(button.dataset.budgetRemaining) || 0;
+            const percent = Math.max(0, Math.min(100, Number(button.dataset.budgetPercent) || 0));
+            const title = document.getElementById('budgetBreakdownTitle');
+            title.textContent = 'Category breakdown - ' + button.dataset.projectName;
+            document.getElementById('breakdownBudgetTotal').textContent = breakdownNumberFormat.format(totalBudget);
+            document.getElementById('breakdownSpentTotal').textContent = breakdownNumberFormat.format(totalSpent);
+            const remainingLabel = document.getElementById('breakdownRemaining');
+            remainingLabel.textContent = breakdownNumberFormat.format(totalRemaining);
+            remainingLabel.classList.toggle('text-danger', totalRemaining < 0);
+            remainingLabel.classList.toggle('text-success', totalRemaining >= 0);
+            document.getElementById('breakdownPercent').textContent = totalRemaining < 0
+                ? 'Over budget'
+                : (Number(button.dataset.budgetPercent) || 0) + '%';
+            const progress = document.getElementById('breakdownProgress');
+            progress.setAttribute('aria-valuenow', String(percent));
+            progress.classList.toggle('over-budget', totalRemaining < 0);
+            document.getElementById('breakdownProgressBar').style.width = percent + '%';
+
+            const rows = document.getElementById('budgetBreakdownRows');
+            rows.replaceChildren();
+            const budgetLines = Array.from(card.querySelectorAll('.budget-line'));
+            budgetLines.forEach(line => {
+                const amount = Number(line.dataset.amount) || 0;
+                const spent = Number(line.dataset.spent) || 0;
+                const remaining = Number(line.dataset.remaining) || 0;
+                const row = document.createElement('tr');
+                const categoryCell = document.createElement('td');
+                categoryCell.textContent = line.dataset.category;
+                row.appendChild(categoryCell);
+
+                [amount, spent, remaining].forEach((value, index) => {
+                    const cell = document.createElement('td');
+                    cell.className = 'text-end';
+                    cell.textContent = breakdownNumberFormat.format(value);
+                    if (index === 2 && remaining < 0) {
+                        cell.classList.add('text-danger', 'fw-semibold');
+                    }
+                    row.appendChild(cell);
+                });
+
+                const breakdownItems = Array.from(line.querySelectorAll('.budget-item'));
+                const breakdownCell = document.createElement('td');
+                const detailsRow = document.createElement('tr');
+                detailsRow.className = 'budget-item-details-row';
+                detailsRow.hidden = true;
+                const detailsCell = document.createElement('td');
+                detailsCell.colSpan = 6;
+                detailsRow.appendChild(detailsCell);
+                const statusCell = document.createElement('td');
+                const statusBadge = document.createElement('span');
+                statusBadge.className = remaining < 0
+                    ? 'badge rounded-pill text-bg-danger'
+                    : 'badge rounded-pill text-bg-success';
+                statusBadge.textContent = remaining < 0 ? 'Over budget' : 'On track';
+                statusCell.appendChild(statusBadge);
+                row.appendChild(statusCell);
+                const detailsButton = document.createElement('button');
+                detailsButton.type = 'button';
+                detailsButton.className = 'btn btn-sm btn-outline-secondary';
+                const hasLegacyReason = Boolean(line.dataset.justification);
+                const hasDetails = breakdownItems.length > 0 || hasLegacyReason || Boolean(line.dataset.amount);
+                const itemCount = breakdownItems.length || (hasDetails ? 1 : 0);
+                detailsButton.textContent = hasDetails
+                    ? 'View items (' + itemCount + ')'
+                    : 'No items';
+                detailsButton.disabled = !hasDetails;
+                detailsButton.setAttribute('aria-expanded', 'false');
+                detailsButton.dataset.itemCount = String(itemCount);
+                detailsButton.addEventListener('click', () => {
+                    if (detailsRow.hidden) {
+                        const openDetails = rows.querySelector('.budget-item-details-row:not([hidden])');
+                        if (openDetails && openDetails !== detailsRow) {
+                            openDetails.hidden = true;
+                            const openButton = openDetails.previousElementSibling.querySelector('.budget-item-details-button');
+                            openButton.textContent = 'View items (' + openButton.dataset.itemCount + ')';
+                            openButton.setAttribute('aria-expanded', 'false');
+                        }
+                        if (!detailsCell.hasChildNodes()) {
+                            const detailsBox = document.createElement('div');
+                            detailsBox.className = 'budget-item-details';
+                            const detailsTable = document.createElement('table');
+                            detailsTable.className = 'table table-sm table-hover align-middle';
+                            const detailsHead = document.createElement('thead');
+                            const headingRow = document.createElement('tr');
+                            const itemHeading = document.createElement('th');
+                            itemHeading.textContent = 'Budget item';
+                            const amountHeading = document.createElement('th');
+                            amountHeading.className = 'text-end';
+                            amountHeading.textContent = 'Amount';
+                            headingRow.append(itemHeading, amountHeading);
+                            detailsHead.appendChild(headingRow);
+                            const detailsBody = document.createElement('tbody');
+                            const itemDetails = breakdownItems.length
+                                ? breakdownItems.map(item => ({
+                                    name: item.dataset.itemName,
+                                    amount: item.dataset.itemAmount
+                                }))
+                                : [{ name: line.dataset.justification || 'Existing budget', amount: line.dataset.amount }];
+                            itemDetails.forEach(item => {
+                                const detail = document.createElement('tr');
+                                const itemName = document.createElement('td');
+                                itemName.textContent = item.name;
+                                const itemAmount = document.createElement('td');
+                                itemAmount.className = 'text-end';
+                                itemAmount.textContent = breakdownNumberFormat.format(Number(item.amount) || 0);
+                                detail.append(itemName, itemAmount);
+                                detailsBody.appendChild(detail);
+                            });
+                            detailsTable.append(detailsHead, detailsBody);
+                            detailsBox.appendChild(detailsTable);
+                            detailsCell.appendChild(detailsBox);
+                        }
+                        detailsRow.hidden = false;
+                        detailsButton.textContent = 'Hide items';
+                        detailsButton.setAttribute('aria-expanded', 'true');
+                    } else {
+                        detailsRow.hidden = true;
+                        detailsButton.textContent = 'View items (' + itemCount + ')';
+                        detailsButton.setAttribute('aria-expanded', 'false');
+                    }
+                });
+                detailsButton.classList.add('budget-item-details-button');
+                breakdownCell.appendChild(detailsButton);
+                row.appendChild(breakdownCell);
+                rows.appendChild(row);
+                rows.appendChild(detailsRow);
+            });
+
+            const hasLines = budgetLines.length > 0;
+            document.getElementById('budgetBreakdownTableWrap').classList.toggle('d-none', !hasLines);
+            document.getElementById('budgetBreakdownEmpty').classList.toggle('d-none', hasLines);
+        });
+    });
+
+    document.querySelectorAll('[data-bs-target="#editProjectModal"]').forEach(button => {
+        button.addEventListener('click', () => {
+            document.getElementById('editProjectName').value = button.dataset.projectName;
+            document.getElementById('editProjectForm').action = '/projects/' + button.dataset.projectId + '/edit';
+        });
+    });
+
+    document.querySelectorAll('[data-bs-target="#contributorModal"]').forEach(button => {
+        button.addEventListener('click', () => {
+            const projectCard = button.closest('.project-card');
+            const contributorData = Array.from(projectCard.querySelectorAll('.project-contributor-data'));
+            const contributorList = document.getElementById('projectContributorList');
+            const emptyMessage = document.getElementById('noProjectContributors');
+            const csrfTemplate = document.getElementById('contributorCsrfToken');
+            contributorList.replaceChildren();
+            document.getElementById('projectContributorCount').textContent = String(contributorData.length);
+            emptyMessage.classList.toggle('d-none', contributorData.length > 0);
+
+            contributorData.forEach(contributor => {
+                const row = document.createElement('div');
+                row.className = 'list-group-item d-flex justify-content-between align-items-center project-contributor-row';
+                const identity = document.createElement('div');
+                const name = document.createElement('div');
+                name.className = 'fw-semibold text-truncate';
+                name.textContent = contributor.dataset.contributorName;
+                const email = document.createElement('div');
+                email.className = 'small text-muted project-contributor-email';
+                email.textContent = contributor.dataset.contributorEmail;
+                identity.append(name, email);
+
+                const form = document.createElement('form');
+                form.method = 'post';
+                form.className = 'm-0 flex-shrink-0';
+                form.action = '/projects/' + button.dataset.projectId + '/contributors/'
+                    + contributor.dataset.contributorId + '/remove';
+                const csrf = document.createElement('input');
+                csrf.type = 'hidden';
+                csrf.name = csrfTemplate.name;
+                csrf.value = csrfTemplate.value;
+                const removeButton = document.createElement('button');
+                removeButton.type = 'submit';
+                removeButton.className = 'btn btn-sm btn-outline-danger';
+                removeButton.textContent = 'Remove';
+                removeButton.setAttribute('aria-label', 'Remove ' + contributor.dataset.contributorName);
+                form.append(csrf, removeButton);
+                form.addEventListener('submit', event => {
+                    if (!window.confirm('Remove ' + contributor.dataset.contributorName + ' from this project?')) {
+                        event.preventDefault();
+                    }
+                });
+                row.append(identity, form);
+                contributorList.appendChild(row);
+            });
+
+            document.getElementById('contributorModalLabel').textContent =
+                'Manage Contributors - ' + button.dataset.projectName;
+            document.getElementById('contributorForm').action =
+                '/projects/' + button.dataset.projectId + '/contributors';
+        });
+    });
+</script>
+</body>
+</html>
