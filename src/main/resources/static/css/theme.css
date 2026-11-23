@@ -1,0 +1,137 @@
+:root {
+    --ink: #17352b;
+    --muted: #6b8177;
+    --accent: #198754;
+    --line: #e2ece6;
+    --bs-primary: #198754;
+    --bs-primary-rgb: 25, 135, 84;
+    --bs-link-color: #198754;
+    --bs-link-hover-color: #146c43;
+}
+
+body {
+    color: var(--ink) !important;
+    background: #fff !important;
+}
+
+.navbar {
+    background: rgba(255, 255, 255, .98) !important;
+    border-color: var(--line) !important;
+}
+
+.brand-mark {
+    background: linear-gradient(135deg, #198754, #34a875) !important;
+}
+
+.sidebar .nav-link:hover {
+    color: #146c43 !important;
+    background: #f0f8f3 !important;
+}
+
+.sidebar .nav-link.active {
+    color: #146c43 !important;
+    background: #e7f4ec !important;
+}
+
+.offcanvas .nav-link:hover {
+    color: #146c43 !important;
+    background: #f0f8f3 !important;
+}
+
+.offcanvas .nav-link.active {
+    color: #146c43 !important;
+    background: #e7f4ec !important;
+}
+
+.btn-primary {
+    background: #198754 !important;
+    border-color: #198754 !important;
+}
+
+.btn-primary:hover {
+    background: #146c43 !important;
+    border-color: #146c43 !important;
+}
+
+.btn-outline-primary {
+    color: #198754 !important;
+    border-color: #b7d9c5 !important;
+}
+
+.btn-outline-primary:hover {
+    color: #fff !important;
+    background: #198754 !important;
+    border-color: #198754 !important;
+}
+
+.btn-outline-light {
+    color: #436153 !important;
+    border-color: #d4e4da !important;
+}
+
+.form-control:focus,
+.form-select:focus {
+    border-color: #71b58f !important;
+    box-shadow: 0 0 0 .2rem rgba(25, 135, 84, .14) !important;
+}
+
+.table thead th,
+.budget-breakdown-table th,
+.budget-items-table th {
+    background: #f4f8f5 !important;
+}
+
+.stat-card::after {
+    background: rgba(25, 135, 84, .08) !important;
+}
+
+.project-card::before {
+    background: linear-gradient(90deg, #198754, #65bd8d) !important;
+}
+
+.project-summary,
+.budget-overview,
+.budget-modal-summary {
+    border-color: #e2ece6 !important;
+    background: #f7faf8 !important;
+}
+
+.entry-count,
+.budget-modal-total {
+    color: #146c43 !important;
+    background: #e7f4ec !important;
+}
+
+.budget-total,
+.budget-breakdown-trigger,
+.budget-breakdown-trigger:hover {
+    color: #146c43 !important;
+}
+
+.budget-progress,
+.budget-modal-progress {
+    background: #e0eee5 !important;
+}
+
+.budget-progress .progress-bar,
+.budget-modal-progress .progress-bar {
+    background: linear-gradient(90deg, #198754, #65bd8d) !important;
+}
+
+.budget-progress.over-budget .progress-bar,
+.budget-modal-progress.over-budget .progress-bar {
+    background: linear-gradient(90deg, #f59e0b, #ef4444) !important;
+}
+
+.budget-table tfoot td {
+    background: #f4f8f5 !important;
+}
+
+.login-art {
+    background: linear-gradient(145deg, #146c43, #198754 58%, #34a875) !important;
+}
+
+.login-art .brand-mark {
+    color: #146c43 !important;
+    background: #fff !important;
+}
