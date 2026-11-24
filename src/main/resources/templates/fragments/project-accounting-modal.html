@@ -1,0 +1,74 @@
+<div xmlns:th="http://www.thymeleaf.org"
+     class="modal fade" id="projectAccountingModal" tabindex="-1"
+     aria-labelledby="projectAccountingTitle" aria-hidden="true"
+     th:fragment="projectAccountingModal">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content border-0 rounded-4 shadow">
+            <div class="modal-header border-0 pb-2">
+                <div>
+                    <div class="small text-muted">Project accounting</div>
+                    <h2 class="modal-title fs-5 fw-bold" id="projectAccountingTitle">Project accounting</h2>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body pt-2">
+                <div class="row g-2 mb-4">
+                    <div class="col-12 col-sm-4">
+                        <div class="p-3 border rounded-3 h-100 bg-light">
+                            <div class="small text-muted text-uppercase fw-semibold">Project total</div>
+                            <div class="fs-5 fw-bold" id="projectAccountingTotal">0.00</div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-sm-4">
+                        <div class="p-3 border rounded-3 h-100 bg-light">
+                            <div class="small text-muted text-uppercase fw-semibold">Entries</div>
+                            <div class="fs-5 fw-bold" id="projectAccountingCount">0</div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-sm-4">
+                        <div class="p-3 border rounded-3 h-100 bg-light">
+                            <div class="small text-muted text-uppercase fw-semibold">Average entry</div>
+                            <div class="fs-5 fw-bold" id="projectAccountingAverage">0.00</div>
+                        </div>
+                    </div>
+                </div>
+
+                <h3 class="h6 mb-2">Actual spending by contributor</h3>
+                <div class="table-responsive border rounded-3">
+                    <table class="table table-sm table-hover align-middle mb-0">
+                        <thead class="table-light">
+                        <tr>
+                            <th scope="col">Contributor</th>
+                            <th scope="col" class="text-end">Entries</th>
+                            <th scope="col" class="text-end">Amount</th>
+                            <th scope="col" class="text-end">Share</th>
+                        </tr>
+                        </thead>
+                        <tbody id="projectAccountingRows"></tbody>
+                    </table>
+                </div>
+                <div id="projectAccountingEmpty" class="text-center text-muted py-4 d-none">
+                    No expenses have been recorded for this project.
+                </div>
+                <p class="form-text mt-2 mb-0">
+                    Paid and share show expenses each person recorded and their percentage of total spending.
+                </p>
+                <hr class="my-4">
+                <h3 class="h6 mb-1">Suggested settlements</h3>
+                <p class="form-text">Suggested transfers compare each participant’s recorded payments with their assigned project share.</p>
+                <div class="table-responsive border rounded-3 mb-2"><table class="table table-sm align-middle mb-0">
+                    <thead class="table-light"><tr><th>From</th><th>To</th><th class="text-end">Amount</th></tr></thead>
+                    <tbody id="accountingSettlementRows"></tbody>
+                </table></div>
+                <div id="accountingSettlementRowsEmpty" class="small text-muted">No transfers needed under an equal split.</div>
+            </div>
+            <div class="modal-footer border-0 pt-0">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+    <style>
+        .accounting-avatar { width: 30px; height: 30px; flex: 0 0 30px; object-fit: cover; }
+        .accounting-avatar-initial { display: inline-flex; align-items: center; justify-content: center; color: #fff; background: #5667e8; font-size: .75rem; font-weight: 700; }
+    </style>
+</div>

@@ -489,6 +489,60 @@ class ProjectBudgetTests {
     }
 
     @Test
+    void calculatesProjectAccountingFromContributorRecordedExpenses() {
+        ProjectContributor contributor = new ProjectContributor();
+        contributor.setProject(project);
+        contributor.setName("Contributor");
+        contributor.setEmail("contributor@example.com");
+        ReflectionTestUtils.setField(contributor, "id", 42L);
+        Expense ownerExpense = projectExpense("owner");
+        ownerExpense.setAmount(new BigDecimal("20.00"));
+        ownerExpense.setAddedByName("Project Owner");
+        Expense contributorExpense = projectExpense("contributor");
+        contributorExpense.setId(4L);
+        contributorExpense.setAmount(new BigDecimal("10.00"));
+        contributorExpense.setAddedByName("Contributor");
+        UserProfile ownerProfile = new UserProfile();
+        ownerProfile.setSubject("owner");
+        ownerProfile.setDisplayName("Project Owner");
+        UserProfile contributorProfile = new UserProfile();
+        contributorProfile.setSubject("contributor");
+        contributorProfile.setEmail("contributor@example.com");
+        contributorProfile.setDisplayName("Google Contributor");
+
+        when(projectRepository.findAll()).thenReturn(List.of(project));
+        when(contributorRepository.findByProjectIdOrderByNameAsc(7L)).thenReturn(List.of(contributor));
+        when(expenseRepository.findByProjectIdOrderByExpenseDateDescIdDesc(7L))
+                .thenReturn(List.of(ownerExpense, contributorExpense));
+        when(expenseRepository.findByProjectNameOrderByExpenseDateDescIdDesc("Trip")).thenReturn(List.of());
+        when(expenseRepository.findByOwnerSubjectOrderByExpenseDateDescIdDesc("owner"))
+                .thenReturn(List.of(ownerExpense));
+        when(userProfileRepository.findAllById(List.of("owner", "contributor")))
+                .thenReturn(List.of(ownerProfile, contributorProfile));
+        when(userProfileRepository.findByEmailIgnoreCaseIn(List.of("contributor@example.com")))
+                .thenReturn(List.of(contributorProfile));
+
+        ExtendedModelMap model = new ExtendedModelMap();
+        controller.projects(model, authentication("owner"));
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> projectCard = ((List<Map<String, Object>>) model.get("projectCards")).get(0);
+        assertEquals(new BigDecimal("30.00"), projectCard.get("total"));
+        assertEquals(2, projectCard.get("count"));
+        assertEquals(new BigDecimal("15.00"), projectCard.get("averageExpense"));
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> contributions =
+                (List<Map<String, Object>>) projectCard.get("accountingContributors");
+        Map<String, Object> contributorTotal = contributions.stream()
+                .filter(row -> "Google Contributor".equals(row.get("name")))
+                .findFirst()
+                .orElseThrow();
+        assertEquals(new BigDecimal("10.00"), contributorTotal.get("amount"));
+        assertEquals(1, contributorTotal.get("count"));
+        assertEquals(new BigDecimal("33.3"), contributorTotal.get("share"));
+    }
+
+    @Test
     void addsSignedInUserDetailsToSharedAccountMenuModel() {
         when(userProfileRepository.findById("owner")).thenReturn(Optional.empty());
 

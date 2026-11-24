@@ -31,6 +31,8 @@ public class ProjectContributor {
 
     private Boolean canManageExpenses = false;
 
+    private Integer expenseSharePercent = 0;
+
     public ProjectContributor() {
     }
 
@@ -92,5 +94,13 @@ public class ProjectContributor {
 
     public void setCanManageExpenses(boolean canManageExpenses) {
         this.canManageExpenses = canManageExpenses;
+    }
+
+    public int getExpenseSharePercent() {
+        return expenseSharePercent == null ? 0 : expenseSharePercent;
+    }
+
+    public void setExpenseSharePercent(int expenseSharePercent) {
+        this.expenseSharePercent = expenseSharePercent;
     }
 }

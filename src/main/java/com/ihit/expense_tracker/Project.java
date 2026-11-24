@@ -20,6 +20,8 @@ public class Project {
 
     private Boolean closed = false;
 
+    private Integer ownerExpenseSharePercent = 100;
+
     public Project() {
     }
 
@@ -53,5 +55,13 @@ public class Project {
 
     public void setClosed(boolean closed) {
         this.closed = closed;
+    }
+
+    public int getOwnerExpenseSharePercent() {
+        return ownerExpenseSharePercent == null ? 100 : ownerExpenseSharePercent;
+    }
+
+    public void setOwnerExpenseSharePercent(int ownerExpenseSharePercent) {
+        this.ownerExpenseSharePercent = ownerExpenseSharePercent;
     }
 }

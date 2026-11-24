@@ -608,6 +608,54 @@ public class ExpenseController {
         return "redirect:/projects";
     }
 
+    @PostMapping("/projects/{id}/rules/expense-shares")
+    @Transactional
+    public String updateProjectExpenseShares(@PathVariable Long id,
+                                             @RequestParam Map<String, String> parameters,
+                                             Authentication authentication,
+                                             RedirectAttributes redirectAttributes) {
+        String ownerSubject = getOwnerSubject(authentication);
+        Project project = projectRepository.findById(id).orElse(null);
+        if (project == null || !Objects.equals(ownerSubject, project.getOwnerSubject())) {
+            redirectAttributes.addFlashAttribute("errorMessage", "Only the project owner can change split rules.");
+            return "redirect:/projects";
+        }
+        if (project.isClosed()) {
+            redirectAttributes.addFlashAttribute("errorMessage", "Closed projects are read-only. Reopen the project first.");
+            return "redirect:/projects";
+        }
+
+        List<ProjectContributor> contributors = contributorRepository.findByProjectIdOrderByNameAsc(id);
+        int ownerPercent;
+        Map<ProjectContributor, Integer> shares = new LinkedHashMap<>();
+        try {
+            ownerPercent = Integer.parseInt(parameters.getOrDefault("ownerSharePercent", ""));
+            if (ownerPercent < 0 || ownerPercent > 100) throw new NumberFormatException();
+            int total = ownerPercent;
+            for (ProjectContributor contributor : contributors) {
+                String value = parameters.get("share_" + contributor.getId());
+                int percent = Integer.parseInt(value == null ? "" : value);
+                if (percent < 0 || percent > 100) throw new NumberFormatException();
+                shares.put(contributor, percent);
+                total += percent;
+            }
+            if (total != 100) {
+                redirectAttributes.addFlashAttribute("errorMessage", "Expense shares must add up to 100%.");
+                return "redirect:/projects";
+            }
+        } catch (NumberFormatException exception) {
+            redirectAttributes.addFlashAttribute("errorMessage", "Enter a whole-number share from 0% to 100% for everyone.");
+            return "redirect:/projects";
+        }
+
+        project.setOwnerExpenseSharePercent(ownerPercent);
+        projectRepository.save(project);
+        shares.forEach(ProjectContributor::setExpenseSharePercent);
+        contributorRepository.saveAll(shares.keySet());
+        redirectAttributes.addFlashAttribute("successMessage", "Project expense split rule saved.");
+        return "redirect:/projects";
+    }
+
     @PostMapping("/expenses")
     public String addExpense(@Valid @ModelAttribute("expense") Expense expense,
                              BindingResult bindingResult,
@@ -1105,12 +1153,13 @@ public class ExpenseController {
         List<Expense> expenses = getVisibleExpenses(ownerSubject, userEmail, savedProjects);
         Map<String, Map<String, Object>> cardsByName = new LinkedHashMap<>();
         Map<String, UserProfile> userProfiles = new LinkedHashMap<>();
-        List<String> ownerSubjects = savedProjects.stream()
-                .map(Project::getOwnerSubject)
+        List<String> profileSubjects = java.util.stream.Stream.concat(
+                        savedProjects.stream().map(Project::getOwnerSubject),
+                        expenses.stream().map(Expense::getOwnerSubject))
                 .filter(subject -> subject != null && !subject.isBlank())
                 .distinct()
                 .toList();
-        userProfileRepository.findAllById(ownerSubjects)
+        userProfileRepository.findAllById(profileSubjects)
                 .forEach(profile -> userProfiles.put(profile.getSubject(), profile));
         Map<Long, List<ProjectContributor>> contributorsByProjectId = new LinkedHashMap<>();
         savedProjects.stream()
@@ -1214,6 +1263,96 @@ public class ExpenseController {
                                 .reduce(BigDecimal.ZERO, BigDecimal::add);
                         card.put("total", projectTotal);
                         card.put("count", projectExpenses.size());
+                        BigDecimal averageExpense = projectExpenses.isEmpty()
+                                ? BigDecimal.ZERO
+                                : projectTotal.divide(
+                                        BigDecimal.valueOf(projectExpenses.size()),
+                                        2,
+                                        java.math.RoundingMode.HALF_UP);
+                        card.put("averageExpense", averageExpense);
+                        Map<String, Map<String, Object>> contributions = new LinkedHashMap<>();
+                        String projectOwnerSubject = savedProject.getOwnerSubject();
+                        UserProfile accountingOwnerProfile = userProfiles.get(projectOwnerSubject);
+                        String ownerDisplayName = accountingOwnerProfile == null
+                                ? null
+                                : accountingOwnerProfile.getDisplayName();
+                        contributions.put("subject:" + projectOwnerSubject, new LinkedHashMap<>(Map.of(
+                                "name", ownerDisplayName == null || ownerDisplayName.isBlank()
+                                        ? getUsernamePlaceholder()
+                                        : ownerDisplayName,
+                                "imageUrl", accountingOwnerProfile == null || accountingOwnerProfile.getImageUrl() == null
+                                        ? ""
+                                        : accountingOwnerProfile.getImageUrl(),
+                                "amount", BigDecimal.ZERO,
+                                "count", 0)));
+                        contributions.get("subject:" + projectOwnerSubject)
+                                .put("sharePercent", savedProject.getOwnerExpenseSharePercent());
+                        contributors.forEach(contributor -> {
+                            String email = contributor.getEmail();
+                            UserProfile contributorProfile = email == null
+                                    ? null
+                                    : userProfilesByEmail.get(email.trim().toLowerCase(java.util.Locale.ROOT));
+                            String subject = contributorProfile == null ? null : contributorProfile.getSubject();
+                            String key = subject == null || subject.isBlank()
+                                    ? "email:" + (email == null ? "" : email.trim().toLowerCase(java.util.Locale.ROOT))
+                                    : "subject:" + subject;
+                            String contributorName = contributor.getId() == null
+                                    ? null
+                                    : contributorDisplayNames.get(contributor.getId());
+                            String contributorImage = contributor.getId() == null
+                                    ? null
+                                    : contributorImageUrls.get(contributor.getId());
+                            contributions.putIfAbsent(key, new LinkedHashMap<>(Map.of(
+                                    "name", contributorName == null ? "Contributor" : contributorName,
+                                    "imageUrl", contributorImage == null ? "" : contributorImage,
+                                    "amount", BigDecimal.ZERO,
+                                    "count", 0)));
+                            Map<String, Object> participant = contributions.get(key);
+                            participant.put("sharePercent", (Integer) participant.getOrDefault("sharePercent", 0)
+                                    + contributor.getExpenseSharePercent());
+                        });
+                        projectExpenses.forEach(expense -> {
+                            String subject = expense.getOwnerSubject();
+                            UserProfile profile = subject == null ? null : userProfiles.get(subject);
+                            String key = subject == null || subject.isBlank()
+                                    ? "legacy:" + (expense.getAddedByName() == null
+                                            ? ""
+                                            : expense.getAddedByName().trim().toLowerCase(java.util.Locale.ROOT))
+                                    : "subject:" + subject;
+                            Map<String, Object> contribution = contributions.computeIfAbsent(key, ignored -> {
+                                Map<String, Object> row = new LinkedHashMap<>();
+                                String displayName = profile == null ? null : profile.getDisplayName();
+                                if (displayName == null || displayName.isBlank()) {
+                                    displayName = expense.getAddedByName();
+                                }
+                                row.put("name", displayName == null || displayName.isBlank()
+                                        ? "Unknown contributor"
+                                        : displayName);
+                                row.put("imageUrl", profile == null || profile.getImageUrl() == null
+                                        ? ""
+                                        : profile.getImageUrl());
+                                row.put("amount", BigDecimal.ZERO);
+                                row.put("count", 0);
+                                row.put("sharePercent", 0);
+                                return row;
+                            });
+                            contribution.put("amount",
+                                    ((BigDecimal) contribution.get("amount")).add(expense.getAmount()));
+                            contribution.put("count", (Integer) contribution.get("count") + 1);
+                        });
+                        List<Map<String, Object>> accountingContributors = contributions.values().stream()
+                                .peek(contribution -> {
+                                    BigDecimal amount = (BigDecimal) contribution.get("amount");
+                                    BigDecimal share = projectTotal.signum() == 0
+                                            ? BigDecimal.ZERO
+                                            : amount.multiply(BigDecimal.valueOf(100))
+                                                    .divide(projectTotal, 1, java.math.RoundingMode.HALF_UP);
+                                    contribution.put("share", share);
+                                })
+                                .sorted((left, right) -> ((String) left.get("name"))
+                                        .compareToIgnoreCase((String) right.get("name")))
+                                .toList();
+                        card.put("accountingContributors", accountingContributors);
                         Map<String, BigDecimal> spentByCategory = new java.util.TreeMap<>(String.CASE_INSENSITIVE_ORDER);
                         projectExpenses.stream()
                                 .filter(expense -> expense.getCategory() != null)
@@ -1241,6 +1380,67 @@ public class ExpenseController {
                                 })
                                 .toList();
                         card.put("budgetLines", budgetLines);
+                        List<Map<String, Object>> settlements = new java.util.ArrayList<>();
+                        List<Map<String, Object>> debtors = new java.util.ArrayList<>();
+                        List<Map<String, Object>> creditors = new java.util.ArrayList<>();
+                        List<Map<String, Object>> assignedShares = accountingContributors.stream()
+                                .filter(person -> ((Integer) person.getOrDefault("sharePercent", 0)) > 0)
+                                .map(person -> {
+                                    BigDecimal exact = projectTotal.multiply(BigDecimal.valueOf(
+                                            (Integer) person.getOrDefault("sharePercent", 0)))
+                                            .divide(BigDecimal.valueOf(100), 8, java.math.RoundingMode.DOWN);
+                                    Map<String, Object> assigned = new LinkedHashMap<>();
+                                    assigned.put("person", person);
+                                    assigned.put("share", exact.setScale(2, java.math.RoundingMode.DOWN));
+                                    assigned.put("remainder", exact.remainder(new BigDecimal("0.01")));
+                                    return assigned;
+                                }).collect(java.util.stream.Collectors.toCollection(java.util.ArrayList::new));
+                        BigDecimal assignedTotal = assignedShares.stream()
+                                .map(row -> (BigDecimal) row.get("share"))
+                                .reduce(BigDecimal.ZERO, BigDecimal::add);
+                        int remainingCents = projectTotal.subtract(assignedTotal)
+                                .movePointRight(2).intValue();
+                        assignedShares.sort(Comparator.comparing(
+                                (Map<String, Object> row) -> (BigDecimal) row.get("remainder")).reversed()
+                                .thenComparing(row -> (String) ((Map<?, ?>) row.get("person")).get("name"),
+                                        String.CASE_INSENSITIVE_ORDER));
+                        for (int i = 0; i < remainingCents && !assignedShares.isEmpty(); i++) {
+                            Map<String, Object> row = assignedShares.get(i % assignedShares.size());
+                            row.put("share", ((BigDecimal) row.get("share")).add(new BigDecimal("0.01")));
+                        }
+                        Map<Map<String, Object>, BigDecimal> targetShares = new java.util.IdentityHashMap<>();
+                        assignedShares.forEach(row -> {
+                            @SuppressWarnings("unchecked")
+                            Map<String, Object> person = (Map<String, Object>) row.get("person");
+                            targetShares.put(person, (BigDecimal) row.get("share"));
+                        });
+                        for (Map<String, Object> person : accountingContributors) {
+                            BigDecimal personShare = targetShares.getOrDefault(person, BigDecimal.ZERO);
+                            BigDecimal balance = ((BigDecimal) person.get("amount")).subtract(personShare);
+                            if (balance.signum() < 0) {
+                                debtors.add(new LinkedHashMap<>(Map.of("name", person.get("name"), "amount", balance.abs())));
+                            } else if (balance.signum() > 0) {
+                                creditors.add(new LinkedHashMap<>(Map.of("name", person.get("name"), "amount", balance)));
+                            }
+                        }
+                        int debtorIndex = 0, creditorIndex = 0;
+                        while (debtorIndex < debtors.size() && creditorIndex < creditors.size()) {
+                            Map<String, Object> debtor = debtors.get(debtorIndex);
+                            Map<String, Object> creditor = creditors.get(creditorIndex);
+                            BigDecimal transfer = (BigDecimal) debtor.get("amount");
+                            BigDecimal owed = (BigDecimal) creditor.get("amount");
+                            BigDecimal settlement = transfer.min(owed).setScale(2, java.math.RoundingMode.HALF_UP);
+                            settlements.add(Map.of("from", debtor.get("name"), "to", creditor.get("name"), "amount", settlement));
+                            transfer = transfer.subtract(settlement);
+                            owed = owed.subtract(settlement);
+                            debtor.put("amount", transfer);
+                            creditor.put("amount", owed);
+                            if (transfer.signum() == 0) debtorIndex++;
+                            if (owed.signum() == 0) creditorIndex++;
+                        }
+                        card.put("settlements", settlements);
+                        card.put("equalShareDisplay", BigDecimal.ZERO);
+                        card.put("ownerExpenseSharePercent", savedProject.getOwnerExpenseSharePercent());
                         card.put("budgetTotal", categoryBudgets.isEmpty() ? null : budgetTotal);
                         card.put("budgetRemaining", categoryBudgets.isEmpty()
                                 ? null
@@ -1258,6 +1458,9 @@ public class ExpenseController {
                         card.put("id", null);
                         card.put("ownerName", getUsernamePlaceholder());
                         card.put("ownerImageUrl", "");
+                        card.put("averageExpense", BigDecimal.ZERO);
+                        card.put("accountingContributors", List.of());
+                        card.put("settlements", List.of());
                         card.put("contributors", List.of());
                         card.put("canAddExpense", false);
                         card.put("contributorImageUrls", Map.of());
