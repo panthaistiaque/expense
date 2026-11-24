@@ -6,7 +6,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.ManyToOne;
 import jakarta.validation.constraints.Email;
-import jakarta.validation.constraints.NotBlank;
+import java.time.LocalDate;
 
 @Entity
 public class ProjectContributor {
@@ -18,14 +18,18 @@ public class ProjectContributor {
     @ManyToOne(optional = false)
     private Project project;
 
-    @NotBlank(message = "Contributor name is required")
     private String name;
 
-    @NotBlank(message = "Contributor email is required")
     @Email(message = "Enter a valid email")
     private String email;
 
     private String imageUrl;
+
+    private LocalDate addedAt;
+
+    private Boolean canViewExpenses = true;
+
+    private Boolean canManageExpenses = false;
 
     public ProjectContributor() {
     }
@@ -64,5 +68,29 @@ public class ProjectContributor {
 
     public void setImageUrl(String imageUrl) {
         this.imageUrl = imageUrl;
+    }
+
+    public LocalDate getAddedAt() {
+        return addedAt;
+    }
+
+    public void setAddedAt(LocalDate addedAt) {
+        this.addedAt = addedAt;
+    }
+
+    public boolean isCanViewExpenses() {
+        return !Boolean.FALSE.equals(canViewExpenses);
+    }
+
+    public void setCanViewExpenses(boolean canViewExpenses) {
+        this.canViewExpenses = canViewExpenses;
+    }
+
+    public boolean isCanManageExpenses() {
+        return Boolean.TRUE.equals(canManageExpenses);
+    }
+
+    public void setCanManageExpenses(boolean canManageExpenses) {
+        this.canManageExpenses = canManageExpenses;
     }
 }

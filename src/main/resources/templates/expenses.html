@@ -51,48 +51,17 @@
             <span class="navbar-toggler-icon"></span>
         </button>
         <a class="navbar-brand fw-semibold d-flex align-items-center" href="/"><span class="brand-mark">E</span>Expense Tracker</a>
-        <div class="d-flex align-items-center user-label">
-            <span class="small me-2 d-none d-sm-inline">Welcome,</span>
-            <span class="fw-semibold" th:text="${username}">User</span>
-            <form class="ms-3" th:action="@{/logout}" method="post">
-                <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
-                <button type="submit" class="btn btn-sm btn-outline-light">Logout</button>
-            </form>
-        </div>
+        <div th:replace="~{fragments/account-menu :: accountMenu(username=${username}, ownerImageUrl=${ownerImageUrl}, userEmail=${userEmail})}"></div>
     </div>
 </nav>
 
-<aside class="sidebar bg-white border-end position-fixed d-none d-md-block">
-    <div class="p-3">
-        <div class="sidebar-label px-3 mb-2 mt-1">Workspace</div>
-        <nav class="nav nav-pills flex-column gap-1">
-            <a class="nav-link" href="/dashboard">Dashboard</a>
-            <a class="nav-link active" aria-current="page" href="/expenses">Expenses</a>
-            <a class="nav-link" href="/projects">Projects</a>
-            <a class="nav-link" href="/categories">Categories</a>
-        </nav>
-    </div>
-</aside>
-
-<aside class="offcanvas offcanvas-start" tabindex="-1" id="sidebarMenu" aria-labelledby="sidebarMenuLabel">
-    <div class="offcanvas-header">
-        <h2 class="offcanvas-title fs-5" id="sidebarMenuLabel">Menu</h2>
-        <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
-    </div>
-    <div class="offcanvas-body">
-        <nav class="nav nav-pills flex-column gap-1">
-            <a class="nav-link" href="/dashboard">Dashboard</a>
-            <a class="nav-link active" aria-current="page" href="/expenses">Expenses</a>
-            <a class="nav-link" href="/projects">Projects</a>
-            <a class="nav-link" href="/categories">Categories</a>
-        </nav>
-    </div>
-</aside>
+<div th:replace="~{fragments/sidebar :: workspaceSidebar('expenses')}"></div>
 
 <main class="main-content container-fluid px-3 px-md-4 py-4">
     <div class="page-heading d-flex justify-content-between align-items-center mb-4">
         <div><h1 class="h3 mb-1">Expenses</h1><p class="mb-0">Track and manage your project spending.</p></div>
-        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#expenseModal">
+        <button th:if="${!#lists.isEmpty(projectNames)}" type="button" class="btn btn-primary"
+                data-bs-toggle="modal" data-bs-target="#expenseModal">
             Add Expense
         </button>
     </div>
@@ -116,63 +85,13 @@
         <span th:text="${successMessage}"></span>
         <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
     </div>
-
-    <div class="modal fade" id="expenseModal" tabindex="-1" aria-labelledby="expenseModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-lg modal-dialog-centered">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h2 class="modal-title fs-5" id="expenseModalLabel">New Expense</h2>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-            <form th:action="@{/expenses}" th:object="${expense}" method="post">
-                <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
-                <div class="row g-3">
-                    <div class="col-12">
-                        <label for="projectName" class="form-label">Project</label>
-                        <select class="form-select" th:field="*{projectName}" th:errorclass="is-invalid" id="projectName" required>
-                            <option value="">Choose project</option>
-                            <option th:each="projectName : ${projects}"
-                                    th:value="${projectName}"
-                                    th:text="${projectName}"></option>
-                        </select>
-                        <div class="invalid-feedback" th:errors="*{projectName}"></div>
-                    </div>
-                    <div class="col-12">
-                        <label for="expenseDate" class="form-label">Expense Date</label>
-                        <input type="date" class="form-control" th:field="*{expenseDate}" th:errorclass="is-invalid" id="expenseDate" required>
-                        <div class="invalid-feedback" th:errors="*{expenseDate}"></div>
-                    </div>
-                    <div class="col-12">
-                        <label for="amount" class="form-label">Amount</label>
-                        <input type="number" step="0.01" min="0.01" class="form-control" th:field="*{amount}" th:errorclass="is-invalid" id="amount" placeholder="0.00" required>
-                        <div class="invalid-feedback" th:errors="*{amount}"></div>
-                    </div>
-                    <div class="col-12">
-                        <label for="particulars" class="form-label">Particulars</label>
-                        <input type="text" class="form-control" th:field="*{particulars}" th:errorclass="is-invalid" id="particulars" placeholder="Description" required>
-                        <div class="invalid-feedback" th:errors="*{particulars}"></div>
-                    </div>
-                    <div class="col-12">
-                        <label for="category" class="form-label">Category</label>
-                        <select class="form-select" th:field="*{category}" th:errorclass="is-invalid" id="category" required>
-                            <option value="">Choose category</option>
-                            <option th:each="categoryName : ${categories}"
-                                    th:value="${categoryName}"
-                                    th:text="${categoryName}"></option>
-                        </select>
-                        <div class="invalid-feedback" th:errors="*{category}"></div>
-                    </div>
-                </div>
-                <div class="d-flex justify-content-end gap-2 mt-4">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Save Expense</button>
-                </div>
-            </form>
-                </div>
-            </div>
-        </div>
+    <div th:if="${errorMessage}" class="alert alert-danger alert-dismissible fade show" role="alert">
+        <span th:text="${errorMessage}"></span>
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
     </div>
+
+    <div th:replace="~{fragments/expense-modals :: expenseEntryModal('expenseModal', 'New Expense', false, 'modal-lg')}"></div>
+    <div th:replace="~{fragments/expense-modals :: expenseEditModal}"></div>
 
     <div class="card border-0 overflow-hidden">
     <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
@@ -189,32 +108,121 @@
                 <th>Category</th>
                 <th>Added By</th>
                 <th class="text-end">Amount</th>
+                <th class="text-end">Actions</th>
             </tr>
             </thead>
             <tbody>
             <tr th:if="${#lists.isEmpty(expenses)}">
-                <td colspan="6" class="text-center text-muted py-4">No expense entries yet.</td>
+                <td colspan="7" class="text-center text-muted py-4">No expense entries yet.</td>
             </tr>
             <tr th:each="entry : ${expenses}">
                 <td th:text="${entry.projectName}"></td>
                 <td th:text="${#temporals.format(entry.expenseDate, 'dd MMM yyyy')}"></td>
                 <td th:text="${entry.particulars}"></td>
                 <td><span class="badge text-bg-secondary" th:text="${entry.category}"></span></td>
-                <td th:text="${entry.addedByName != null ? entry.addedByName : 'Owner'}"></td>
+                <td class="text-center">
+                    <img th:if="${entry.ownerSubject != null and userProfileImages[entry.ownerSubject] != null}"
+                         th:src="${userProfileImages[entry.ownerSubject]}"
+                         class="rounded-circle submitter-avatar" width="32" height="32"
+                         th:title="${entry.addedByName != null ? entry.addedByName : 'Owner'}"
+                         th:alt="${entry.addedByName != null ? entry.addedByName : 'Owner'}"
+                         loading="lazy" decoding="async">
+                    <span th:unless="${entry.ownerSubject != null and userProfileImages[entry.ownerSubject] != null}"
+                          class="submitter-avatar submitter-avatar-initial rounded-circle"
+                          th:title="${entry.addedByName != null ? entry.addedByName : 'Owner'}"
+                          th:text="${#strings.substring(entry.addedByName == null or #strings.isEmpty(entry.addedByName) ? 'O' : entry.addedByName, 0, 1)}">O</span>
+                </td>
                 <td class="text-end" th:text="${#numbers.formatDecimal(entry.amount, 1, 'COMMA', 2, 'POINT')}"></td>
+                <td class="text-end text-nowrap">
+                    <div th:if="${editableExpenseIds.contains(entry.id)}" class="d-inline-flex gap-1">
+                        <button type="button" class="btn btn-sm btn-outline-primary"
+                                data-bs-toggle="modal" data-bs-target="#editExpenseModal"
+                                th:data-expense-id="${entry.id}"
+                                th:data-expense-date="${entry.expenseDate}"
+                                th:data-expense-amount="${entry.amount}"
+                                th:data-expense-particulars="${entry.particulars}"
+                                th:data-expense-category="${entry.category}"
+                                aria-label="Edit expense">Edit</button>
+                        <form method="post" class="expense-delete-form"
+                              th:action="@{/expenses/{id}/delete(id=${entry.id})}"
+                              th:data-expense-particulars="${entry.particulars}">
+                            <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                            <button type="submit" class="btn btn-sm btn-outline-danger" aria-label="Delete expense">Delete</button>
+                        </form>
+                    </div>
+                    <span th:unless="${editableExpenseIds.contains(entry.id)}" class="text-muted">View only</span>
+                </td>
             </tr>
             </tbody>
         </table>
     </div>
     </div>
 </main>
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" defer></script>
 <script th:inline="javascript">
     /*<![CDATA[*/
     const openExpenseModal = /*[[${openExpenseModal == true}]]*/ false;
     if (openExpenseModal) {
         bootstrap.Modal.getOrCreateInstance(document.getElementById('expenseModal')).show();
     }
+
+    function showButtonSpinner(button, label) {
+        button.disabled = true;
+        button.setAttribute('aria-busy', 'true');
+        button.replaceChildren();
+        const spinner = document.createElement('span');
+        spinner.className = 'spinner-border spinner-border-sm me-2';
+        spinner.setAttribute('role', 'status');
+        spinner.setAttribute('aria-hidden', 'true');
+        button.append(spinner, document.createTextNode(label));
+    }
+
+    const editExpenseForm = document.getElementById('editExpenseForm');
+    const editExpenseModal = document.getElementById('editExpenseModal');
+    let isSavingExpense = false;
+    editExpenseModal.addEventListener('hide.bs.modal', (event) => {
+        if (isSavingExpense) {
+            event.preventDefault();
+        }
+    });
+    document.querySelectorAll('[data-bs-target="#editExpenseModal"]').forEach((button) => {
+        button.addEventListener('click', () => {
+            editExpenseForm.action = '/expenses/' + button.dataset.expenseId + '/edit';
+            document.getElementById('editExpenseDate').value = button.dataset.expenseDate;
+            document.getElementById('editExpenseAmount').value = button.dataset.expenseAmount;
+            document.getElementById('editExpenseParticulars').value = button.dataset.expenseParticulars;
+            document.getElementById('editExpenseCategory').value = button.dataset.expenseCategory;
+        });
+    });
+    editExpenseForm.addEventListener('submit', (event) => {
+        if (isSavingExpense) {
+            event.preventDefault();
+            return;
+        }
+        isSavingExpense = true;
+        editExpenseModal.setAttribute('aria-busy', 'true');
+        editExpenseModal.querySelectorAll('[data-bs-dismiss="modal"]').forEach((button) => {
+            button.disabled = true;
+        });
+        showButtonSpinner(editExpenseForm.querySelector('[type="submit"]'), 'Saving...');
+    });
+
+    document.querySelectorAll('.expense-delete-form').forEach((form) => {
+        let isDeletingExpense = false;
+        form.addEventListener('submit', (event) => {
+            const particulars = form.dataset.expenseParticulars || 'this expense';
+            if (!window.confirm('Delete "' + particulars + '"? This action cannot be undone.')) {
+                event.preventDefault();
+                return;
+            }
+            if (isDeletingExpense) {
+                event.preventDefault();
+                return;
+            }
+            isDeletingExpense = true;
+            showButtonSpinner(form.querySelector('[type="submit"]'), 'Deleting...');
+        });
+    });
     /*]]>*/
 </script>
 </body>

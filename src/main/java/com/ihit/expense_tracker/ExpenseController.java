@@ -1,6 +1,10 @@
 package com.ihit.expense_tracker;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Digits;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.validation.BindingResult;
@@ -20,7 +24,10 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.Map;
+import java.util.Set;
+import java.util.regex.Pattern;
 
 @Controller
 public class ExpenseController {
@@ -28,6 +35,8 @@ public class ExpenseController {
     private static final List<String> DEFAULT_CATEGORIES = List.of(
             "Food", "Transport", "Shopping", "Utilities",
             "Health", "Education", "Entertainment", "Other");
+    private static final Pattern CONTRIBUTOR_EMAIL_PATTERN =
+            Pattern.compile("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$");
 
     private final ExpenseRepository expenseRepository;
     private final ProjectRepository projectRepository;
@@ -56,6 +65,17 @@ public class ExpenseController {
     @GetMapping("/")
     public String home() {
         return "redirect:/projects";
+    }
+
+    @ModelAttribute
+    public void addAccountMenuProfile(Model model, Authentication authentication) {
+        UserProfile profile = synchronizeUserProfile(authentication);
+        model.addAttribute("username", profile != null && profile.getDisplayName() != null
+                ? profile.getDisplayName()
+                : getUsername(authentication));
+        model.addAttribute("ownerImageUrl", profile == null ? getUserImage(authentication) : profile.getImageUrl());
+        model.addAttribute("userEmail", profile == null ? getUserEmail(authentication) : profile.getEmail());
+        model.addAttribute("databaseSearchAllowed", DatabaseSearchAccess.isAllowed(authentication));
     }
 
     @GetMapping("/dashboard")
@@ -98,7 +118,9 @@ public class ExpenseController {
         model.addAttribute("monthTotal", monthTotal);
         model.addAttribute("total", total);
         model.addAttribute("expenseCount", expenses.size());
-        model.addAttribute("recentExpenses", expenses.stream().limit(5).toList());
+        List<Expense> recentExpenses = expenses.stream().limit(5).toList();
+        model.addAttribute("recentExpenses", recentExpenses);
+        model.addAttribute("userProfileImages", getExpenseSubmitterImages(recentExpenses));
         model.addAttribute("projects", projects);
         model.addAttribute("selectedProject", selectedProject);
         return "dashboard";
@@ -129,7 +151,12 @@ public class ExpenseController {
         }
 
         model.addAttribute("expenses", expenses);
+        model.addAttribute("userProfileImages", getExpenseSubmitterImages(expenses));
+        model.addAttribute("editableExpenseIds",
+                getEditableExpenseIds(expenses, ownerSubject, getUserEmail(authentication), visibleProjects));
         model.addAttribute("projects", projects);
+        model.addAttribute("projectNames",
+                getWritableProjectNames(visibleProjects, ownerSubject, getUserEmail(authentication)));
         model.addAttribute("categories", getCategoryNames(ownerSubject));
         model.addAttribute("selectedProject", selectedProject);
         model.addAttribute("total", expenses.stream()
@@ -195,19 +222,7 @@ public class ExpenseController {
     @GetMapping("/projects")
     public String projects(Model model, Authentication authentication) {
         String ownerSubject = getOwnerSubject(authentication);
-        synchronizeUserProfile(authentication);
         List<Project> savedProjects = getVisibleProjects(ownerSubject, getUserEmail(authentication));
-        for (Project project : savedProjects) {
-            if (ownerSubject.equals(project.getOwnerSubject())) {
-                if (project.getOwnerName() == null || project.getOwnerName().isBlank()) {
-                    project.setOwnerName(getUsername(authentication));
-                }
-                if (project.getOwnerImageUrl() == null || project.getOwnerImageUrl().isBlank()) {
-                    project.setOwnerImageUrl(getUserImage(authentication));
-                }
-            }
-        }
-        projectRepository.saveAll(savedProjects);
         model.addAttribute("username", getUsername(authentication));
         model.addAttribute("ownerImageUrl", getUserImage(authentication));
         model.addAttribute("project", new Project());
@@ -215,6 +230,8 @@ public class ExpenseController {
         expense.setExpenseDate(LocalDate.now());
         model.addAttribute("expense", expense);
         model.addAttribute("projects", savedProjects);
+        model.addAttribute("projectNames",
+                getWritableProjectNames(savedProjects, ownerSubject, getUserEmail(authentication)));
         model.addAttribute("categories", getCategoryNames(ownerSubject));
         model.addAttribute("budgetCategories", getBudgetCategoryNames(ownerSubject, savedProjects));
         model.addAttribute("projectCards", projectCards(ownerSubject, getUserEmail(authentication)));
@@ -237,11 +254,14 @@ public class ExpenseController {
             model.addAttribute("ownerImageUrl", getUserImage(authentication));
             Expense expense = new Expense();
             expense.setExpenseDate(LocalDate.now());
+            List<Project> savedProjects = getVisibleProjects(ownerSubject, getUserEmail(authentication));
             model.addAttribute("expense", expense);
-            model.addAttribute("projects", getVisibleProjects(ownerSubject, getUserEmail(authentication)));
+            model.addAttribute("projects", savedProjects);
+            model.addAttribute("projectNames",
+                    getWritableProjectNames(savedProjects, ownerSubject, getUserEmail(authentication)));
             model.addAttribute("categories", getCategoryNames(ownerSubject));
             model.addAttribute("budgetCategories", getBudgetCategoryNames(
-                    ownerSubject, getVisibleProjects(ownerSubject, getUserEmail(authentication))));
+                    ownerSubject, savedProjects));
             model.addAttribute("projectCards", projectCards(ownerSubject, getUserEmail(authentication)));
             model.addAttribute("currentOwnerSubject", ownerSubject);
             model.addAttribute("openProjectModal", true);
@@ -249,8 +269,6 @@ public class ExpenseController {
         }
 
         project.setOwnerSubject(ownerSubject);
-        project.setOwnerName(getUsername(authentication));
-        project.setOwnerImageUrl(getUserImage(authentication));
         projectRepository.save(project);
         redirectAttributes.addFlashAttribute("successMessage", "Project added successfully.");
         return "redirect:/";
@@ -267,6 +285,10 @@ public class ExpenseController {
             redirectAttributes.addFlashAttribute("errorMessage", "Only the project owner can edit this project.");
             return "redirect:/";
         }
+        if (project.isClosed()) {
+            redirectAttributes.addFlashAttribute("errorMessage", "Closed projects are read-only. Reopen the project first.");
+            return "redirect:/";
+        }
         if (name == null || name.isBlank()) {
             redirectAttributes.addFlashAttribute("errorMessage", "Project name is required.");
             return "redirect:/";
@@ -275,6 +297,42 @@ public class ExpenseController {
         projectRepository.save(project);
         redirectAttributes.addFlashAttribute("successMessage", "Project updated successfully.");
         return "redirect:/";
+    }
+
+    @PostMapping("/projects/{id}/close")
+    public String closeProject(@PathVariable Long id,
+                               Authentication authentication,
+                               RedirectAttributes redirectAttributes) {
+        String ownerSubject = getOwnerSubject(authentication);
+        Project project = projectRepository.findById(id).orElse(null);
+        if (project == null || !Objects.equals(ownerSubject, project.getOwnerSubject())) {
+            redirectAttributes.addFlashAttribute("errorMessage", "Only the project owner can close this project.");
+            return "redirect:/projects";
+        }
+        if (!project.isClosed()) {
+            project.setClosed(true);
+            projectRepository.save(project);
+        }
+        redirectAttributes.addFlashAttribute("successMessage", "Project closed. It is now read-only.");
+        return "redirect:/projects";
+    }
+
+    @PostMapping("/projects/{id}/reopen")
+    public String reopenProject(@PathVariable Long id,
+                                Authentication authentication,
+                                RedirectAttributes redirectAttributes) {
+        String ownerSubject = getOwnerSubject(authentication);
+        Project project = projectRepository.findById(id).orElse(null);
+        if (project == null || !Objects.equals(ownerSubject, project.getOwnerSubject())) {
+            redirectAttributes.addFlashAttribute("errorMessage", "Only the project owner can reopen this project.");
+            return "redirect:/projects";
+        }
+        if (project.isClosed()) {
+            project.setClosed(false);
+            projectRepository.save(project);
+        }
+        redirectAttributes.addFlashAttribute("successMessage", "Project reopened successfully.");
+        return "redirect:/projects";
     }
 
     @GetMapping("/projects/{id}/budget")
@@ -364,6 +422,10 @@ public class ExpenseController {
             redirectAttributes.addFlashAttribute("errorMessage", "Only the project owner can manage its budget.");
             return "redirect:/projects";
         }
+        if (project.isClosed()) {
+            redirectAttributes.addFlashAttribute("errorMessage", "Closed projects are read-only. Reopen the project first.");
+            return "redirect:/projects/" + id + "/budget";
+        }
         String budgetPage = "redirect:/projects/" + id + "/budget";
         String categoryName = category.trim();
 
@@ -452,9 +514,7 @@ public class ExpenseController {
 
     @PostMapping("/projects/{id}/contributors")
     public String addContributor(@PathVariable Long id,
-                                 @RequestParam String name,
                                  @RequestParam String email,
-                                 @RequestParam(required = false) String imageUrl,
                                  Authentication authentication,
                                  RedirectAttributes redirectAttributes) {
         String ownerSubject = getOwnerSubject(authentication);
@@ -463,16 +523,30 @@ public class ExpenseController {
             redirectAttributes.addFlashAttribute("errorMessage", "Only the project owner can add contributors.");
             return "redirect:/";
         }
-        if (name == null || name.isBlank() || email == null || email.isBlank()) {
-            redirectAttributes.addFlashAttribute("errorMessage", "Contributor name and email are required.");
+        if (project.isClosed()) {
+            redirectAttributes.addFlashAttribute("errorMessage", "Closed projects are read-only. Reopen the project first.");
+            return "redirect:/projects";
+        }
+
+        String normalizedEmail = email == null ? "" : email.trim().toLowerCase(java.util.Locale.ROOT);
+        if (!CONTRIBUTOR_EMAIL_PATTERN.matcher(normalizedEmail).matches()) {
+            redirectAttributes.addFlashAttribute("errorMessage", "Enter a valid contributor email address.");
+            return "redirect:/";
+        }
+        boolean alreadyAdded = contributorRepository.findByProjectIdOrderByNameAsc(id).stream()
+                .anyMatch(existing -> normalizedEmail.equalsIgnoreCase(existing.getEmail()));
+        if (alreadyAdded) {
+            redirectAttributes.addFlashAttribute("errorMessage", "That email is already a project contributor.");
             return "redirect:/";
         }
 
         ProjectContributor contributor = new ProjectContributor();
         contributor.setProject(project);
-        contributor.setName(name.trim());
-        contributor.setEmail(email.trim());
-        contributor.setImageUrl(imageUrl == null ? "" : imageUrl.trim());
+        contributor.setName(normalizedEmail);
+        contributor.setEmail(normalizedEmail);
+        contributor.setAddedAt(LocalDate.now());
+        contributor.setCanViewExpenses(true);
+        contributor.setCanManageExpenses(false);
         contributorRepository.save(contributor);
         redirectAttributes.addFlashAttribute("successMessage", "Contributor added successfully.");
         return "redirect:/";
@@ -489,6 +563,10 @@ public class ExpenseController {
             redirectAttributes.addFlashAttribute("errorMessage", "Only the project owner can remove contributors.");
             return "redirect:/";
         }
+        if (project.isClosed()) {
+            redirectAttributes.addFlashAttribute("errorMessage", "Closed projects are read-only. Reopen the project first.");
+            return "redirect:/projects";
+        }
 
         ProjectContributor contributor = contributorRepository.findById(contributorId).orElse(null);
         if (contributor == null || contributor.getProject() == null
@@ -500,6 +578,34 @@ public class ExpenseController {
         contributorRepository.delete(contributor);
         redirectAttributes.addFlashAttribute("successMessage", "Contributor removed successfully.");
         return "redirect:/";
+    }
+
+    @PostMapping("/projects/{id}/contributors/{contributorId}/permission")
+    public String updateContributorPermission(@PathVariable Long id,
+                                              @PathVariable Long contributorId,
+                                              @RequestParam(defaultValue = "false") boolean canViewExpenses,
+                                              @RequestParam(defaultValue = "false") boolean canManageExpenses,
+                                              Authentication authentication,
+                                              RedirectAttributes redirectAttributes) {
+        String ownerSubject = getOwnerSubject(authentication);
+        Project project = projectRepository.findById(id).orElse(null);
+        if (project == null || !Objects.equals(ownerSubject, project.getOwnerSubject())) {
+            redirectAttributes.addFlashAttribute("errorMessage", "Only the project owner can change contributor access.");
+            return "redirect:/projects";
+        }
+
+        ProjectContributor contributor = contributorRepository.findById(contributorId).orElse(null);
+        if (contributor == null || contributor.getProject() == null
+                || !id.equals(contributor.getProject().getId())) {
+            redirectAttributes.addFlashAttribute("errorMessage", "Contributor not found in this project.");
+            return "redirect:/projects";
+        }
+
+        contributor.setCanViewExpenses(canViewExpenses);
+        contributor.setCanManageExpenses(canManageExpenses);
+        contributorRepository.save(contributor);
+        redirectAttributes.addFlashAttribute("successMessage", "Contributor access updated.");
+        return "redirect:/projects";
     }
 
     @PostMapping("/expenses")
@@ -524,6 +630,8 @@ public class ExpenseController {
                 List<Project> savedProjects = getVisibleProjects(ownerSubject, getUserEmail(authentication));
                 model.addAttribute("project", new Project());
                 model.addAttribute("projects", savedProjects);
+                model.addAttribute("projectNames",
+                        getWritableProjectNames(savedProjects, ownerSubject, getUserEmail(authentication)));
                 model.addAttribute("categories", getCategoryNames(ownerSubject));
                 model.addAttribute("budgetCategories", getBudgetCategoryNames(ownerSubject, savedProjects));
                 model.addAttribute("projectCards", projectCards(ownerSubject, getUserEmail(authentication)));
@@ -532,11 +640,16 @@ public class ExpenseController {
                 model.addAttribute("ownerImageUrl", getUserImage(authentication));
                 return "projects";
             }
-            List<Expense> allExpenses = expenseRepository.findByOwnerSubjectOrderByExpenseDateDescIdDesc(ownerSubject);
-            List<String> projects = getProjectNames(ownerSubject, allExpenses);
-            List<Expense> expenses = allExpenses;
+            List<Project> visibleProjects = getVisibleProjects(ownerSubject, getUserEmail(authentication));
+            List<Expense> expenses = getVisibleExpenses(ownerSubject, getUserEmail(authentication), visibleProjects);
+            List<String> projects = getProjectNames(ownerSubject, expenses);
             model.addAttribute("expenses", expenses);
+            model.addAttribute("userProfileImages", getExpenseSubmitterImages(expenses));
+            model.addAttribute("editableExpenseIds",
+                    getEditableExpenseIds(expenses, ownerSubject, getUserEmail(authentication), visibleProjects));
             model.addAttribute("projects", projects);
+            model.addAttribute("projectNames",
+                    getWritableProjectNames(visibleProjects, ownerSubject, getUserEmail(authentication)));
             model.addAttribute("categories", getCategoryNames(ownerSubject));
             model.addAttribute("selectedProject", "");
             model.addAttribute("total", expenses.stream()
@@ -556,6 +669,14 @@ public class ExpenseController {
             redirectAttributes.addFlashAttribute("errorMessage", "You do not have access to this project.");
             return "redirect:/expenses";
         }
+        if (project.isClosed()) {
+            redirectAttributes.addFlashAttribute("errorMessage", "This project is closed and cannot accept new expenses.");
+            return fromProject ? "redirect:/projects" : "redirect:/expenses";
+        }
+        if (!hasExpenseWriteAccess(project, ownerSubject, getUserEmail(authentication))) {
+            redirectAttributes.addFlashAttribute("errorMessage", "You have view-only access to this project.");
+            return fromProject ? "redirect:/projects" : "redirect:/expenses";
+        }
         expense.setProjectName(project.getName());
         expense.setProjectId(project.getId());
         expense.setOwnerSubject(ownerSubject);
@@ -566,6 +687,53 @@ public class ExpenseController {
             return "redirect:/";
         }
         return "redirect:/expenses";
+    }
+
+    @PostMapping("/expenses/{id}/edit")
+    public String editExpense(@PathVariable Long id,
+                              @Valid @ModelAttribute("updatedExpense") ExpenseEditForm updatedExpense,
+                              BindingResult bindingResult,
+                              Authentication authentication,
+                              RedirectAttributes redirectAttributes) {
+        String ownerSubject = getOwnerSubject(authentication);
+        Expense existingExpense = expenseRepository.findById(id).orElse(null);
+        if (existingExpense == null || !canManageExpense(existingExpense, ownerSubject, getUserEmail(authentication))) {
+            redirectAttributes.addFlashAttribute("errorMessage",
+                    "Expense not found or you do not have permission to change it.");
+            return "redirect:/expenses";
+        }
+
+        String category = updatedExpense.getCategory() == null ? "" : updatedExpense.getCategory().trim();
+        if (bindingResult.hasErrors()
+                || !getCategoryNames(ownerSubject).contains(category)) {
+            redirectAttributes.addFlashAttribute("errorMessage", "Enter valid expense details and choose a valid category.");
+            return redirectToProjectExpenses(existingExpense, redirectAttributes);
+        }
+
+        existingExpense.setExpenseDate(updatedExpense.getExpenseDate());
+        existingExpense.setAmount(updatedExpense.getAmount());
+        existingExpense.setParticulars(updatedExpense.getParticulars().trim());
+        existingExpense.setCategory(category);
+        expenseRepository.save(existingExpense);
+        redirectAttributes.addFlashAttribute("successMessage", "Expense updated successfully.");
+        return redirectToProjectExpenses(existingExpense, redirectAttributes);
+    }
+
+    @PostMapping("/expenses/{id}/delete")
+    public String deleteExpense(@PathVariable Long id,
+                                Authentication authentication,
+                                RedirectAttributes redirectAttributes) {
+        String ownerSubject = getOwnerSubject(authentication);
+        Expense expense = expenseRepository.findById(id).orElse(null);
+        if (expense == null || !canManageExpense(expense, ownerSubject, getUserEmail(authentication))) {
+            redirectAttributes.addFlashAttribute("errorMessage",
+                    "Expense not found or you do not have permission to change it.");
+            return "redirect:/expenses";
+        }
+
+        expenseRepository.delete(expense);
+        redirectAttributes.addFlashAttribute("successMessage", "Expense deleted successfully.");
+        return redirectToProjectExpenses(expense, redirectAttributes);
     }
 
     private List<String> getCategoryNames(String ownerSubject) {
@@ -637,7 +805,152 @@ public class ExpenseController {
         }
         return contributorRepository.findByEmailIgnoreCase(email).stream()
                 .anyMatch(contributor -> contributor.getProject() != null
-                        && project.getId().equals(contributor.getProject().getId()));
+                        && project.getId().equals(contributor.getProject().getId())
+                        && contributor.isCanViewExpenses());
+    }
+
+    private List<String> getWritableProjectNames(List<Project> projects, String ownerSubject, String email) {
+        return projects.stream()
+                .filter(project -> !project.isClosed())
+                .filter(project -> hasExpenseWriteAccess(project, ownerSubject, email))
+                .map(Project::getName)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+    }
+
+    private boolean hasExpenseWriteAccess(Project project, String ownerSubject, String email) {
+        if (project == null || project.isClosed()) {
+            return false;
+        }
+        if (Objects.equals(ownerSubject, project.getOwnerSubject())) {
+            return true;
+        }
+        if (email == null || email.isBlank()) {
+            return false;
+        }
+        return contributorRepository.findByEmailIgnoreCase(email).stream()
+                .anyMatch(contributor -> contributor.getProject() != null
+                        && Objects.equals(project.getId(), contributor.getProject().getId())
+                        && contributor.isCanViewExpenses()
+                        && contributor.isCanManageExpenses());
+    }
+
+    private boolean canManageExpense(Expense expense, String ownerSubject, String email) {
+        Project project = null;
+        if (expense.getProjectId() != null) {
+            project = projectRepository.findById(expense.getProjectId()).orElse(null);
+        } else if (expense.getProjectName() != null && !expense.getProjectName().isBlank()) {
+            project = projectRepository.findAll().stream()
+                    .filter(item -> expense.getProjectName().equalsIgnoreCase(item.getName()))
+                    .findFirst()
+                    .orElse(null);
+        }
+
+        if (project == null) {
+            return Objects.equals(ownerSubject, expense.getOwnerSubject());
+        }
+        if (project.isClosed()) {
+            return false;
+        }
+        if (Objects.equals(ownerSubject, project.getOwnerSubject())) {
+            return true;
+        }
+        return Objects.equals(ownerSubject, expense.getOwnerSubject())
+                && hasExpenseWriteAccess(project, ownerSubject, email);
+    }
+
+    private Set<Long> getEditableExpenseIds(List<Expense> expenses,
+                                            String ownerSubject,
+                                            String email,
+                                            List<Project> visibleProjects) {
+        Map<Long, Project> projectsById = new LinkedHashMap<>();
+        Map<String, Project> projectsByName = new LinkedHashMap<>();
+        visibleProjects.forEach(project -> {
+            projectsById.put(project.getId(), project);
+            if (project.getName() != null) {
+                projectsByName.put(project.getName().toLowerCase(java.util.Locale.ROOT), project);
+            }
+        });
+
+        Set<Long> editableIds = new LinkedHashSet<>();
+        for (Expense expense : expenses) {
+            if (expense.getId() == null) {
+                continue;
+            }
+            Project project = expense.getProjectId() == null
+                    ? null
+                    : projectsById.get(expense.getProjectId());
+            if (project == null && expense.getProjectId() == null && expense.getProjectName() != null) {
+                project = projectsByName.get(expense.getProjectName().toLowerCase(java.util.Locale.ROOT));
+            }
+            boolean projectOpen = project == null || !project.isClosed();
+            boolean projectOwner = projectOpen && project != null
+                    && Objects.equals(ownerSubject, project.getOwnerSubject());
+            boolean ownEntry = Objects.equals(ownerSubject, expense.getOwnerSubject());
+            if (projectOpen && (projectOwner || (project != null && ownEntry
+                    && hasExpenseWriteAccess(project, ownerSubject, email))
+                    || (project == null && expense.getProjectId() == null
+                    && (expense.getProjectName() == null || expense.getProjectName().isBlank()) && ownEntry))) {
+                editableIds.add(expense.getId());
+            }
+        }
+        return editableIds;
+    }
+
+    private String redirectToProjectExpenses(Expense expense, RedirectAttributes redirectAttributes) {
+        if (expense.getProjectName() != null && !expense.getProjectName().isBlank()) {
+            redirectAttributes.addAttribute("project", expense.getProjectName());
+        }
+        return "redirect:/expenses";
+    }
+
+    public static class ExpenseEditForm {
+        @NotNull(message = "Expense date is required")
+        private LocalDate expenseDate;
+
+        @NotNull(message = "Amount is required")
+        @DecimalMin(value = "0.01", message = "Amount must be greater than zero")
+        @Digits(integer = 12, fraction = 2, message = "Enter a valid amount")
+        private BigDecimal amount;
+
+        @NotBlank(message = "Particulars are required")
+        private String particulars;
+
+        @NotBlank(message = "Category is required")
+        private String category;
+
+        public LocalDate getExpenseDate() {
+            return expenseDate;
+        }
+
+        public void setExpenseDate(LocalDate expenseDate) {
+            this.expenseDate = expenseDate;
+        }
+
+        public BigDecimal getAmount() {
+            return amount;
+        }
+
+        public void setAmount(BigDecimal amount) {
+            this.amount = amount;
+        }
+
+        public String getParticulars() {
+            return particulars;
+        }
+
+        public void setParticulars(String particulars) {
+            this.particulars = particulars;
+        }
+
+        public String getCategory() {
+            return category;
+        }
+
+        public void setCategory(String category) {
+            this.category = category;
+        }
     }
 
     private List<Project> getVisibleProjects(String ownerSubject, String email) {
@@ -654,11 +967,28 @@ public class ExpenseController {
 
     private List<Expense> getVisibleExpenses(String ownerSubject, String email, List<Project> visibleProjects) {
         LinkedHashMap<Long, Expense> visible = new LinkedHashMap<>();
+        Set<Long> visibleProjectIds = new LinkedHashSet<>();
+        Set<String> visibleProjectNames = new LinkedHashSet<>();
         visibleProjects.forEach(project -> {
+            if (project.getId() != null) {
+                visibleProjectIds.add(project.getId());
+            }
+            if (project.getName() != null) {
+                visibleProjectNames.add(project.getName().toLowerCase(java.util.Locale.ROOT));
+            }
             getExpensesForProject(project).forEach(expense -> visible.put(expense.getId(), expense));
         });
         expenseRepository.findByOwnerSubjectOrderByExpenseDateDescIdDesc(ownerSubject)
-                .forEach(expense -> visible.putIfAbsent(expense.getId(), expense));
+                .forEach(expense -> {
+                    boolean inVisibleProject = expense.getProjectId() != null
+                            ? visibleProjectIds.contains(expense.getProjectId())
+                            : expense.getProjectName() == null || expense.getProjectName().isBlank()
+                            || visibleProjectNames.contains(
+                                    expense.getProjectName().toLowerCase(java.util.Locale.ROOT));
+                    if (inVisibleProject) {
+                        visible.putIfAbsent(expense.getId(), expense);
+                    }
+                });
         return visible.values().stream()
                 .sorted((left, right) -> {
                     int dates = right.getExpenseDate().compareTo(left.getExpenseDate());
@@ -695,10 +1025,10 @@ public class ExpenseController {
         return "";
     }
 
-    private void synchronizeUserProfile(Authentication authentication) {
+    private UserProfile synchronizeUserProfile(Authentication authentication) {
         String subject = getOAuthAttribute(authentication, "sub");
         if (subject == null || subject.isBlank()) {
-            return;
+            return null;
         }
 
         UserProfile profile = userProfileRepository.findById(subject).orElseGet(UserProfile::new);
@@ -727,6 +1057,7 @@ public class ExpenseController {
         if (changed) {
             userProfileRepository.save(profile);
         }
+        return profile;
     }
 
     private String getOAuthAttribute(Authentication authentication, String name) {
@@ -735,6 +1066,23 @@ public class ExpenseController {
             return value == null ? null : value.toString();
         }
         return null;
+    }
+
+    private Map<String, String> getExpenseSubmitterImages(List<Expense> expenses) {
+        List<String> subjects = expenses.stream()
+                .map(Expense::getOwnerSubject)
+                .filter(subject -> subject != null && !subject.isBlank())
+                .distinct()
+                .toList();
+        if (subjects.isEmpty()) {
+            return Map.of();
+        }
+
+        Map<String, String> imageUrls = new LinkedHashMap<>();
+        userProfileRepository.findAllById(subjects).stream()
+                .filter(profile -> profile.getImageUrl() != null && !profile.getImageUrl().isBlank())
+                .forEach(profile -> imageUrls.put(profile.getSubject(), profile.getImageUrl()));
+        return imageUrls;
     }
 
     private List<String> getProjectNames(String ownerSubject, List<Expense> expenses) {
@@ -764,6 +1112,26 @@ public class ExpenseController {
                 .toList();
         userProfileRepository.findAllById(ownerSubjects)
                 .forEach(profile -> userProfiles.put(profile.getSubject(), profile));
+        Map<Long, List<ProjectContributor>> contributorsByProjectId = new LinkedHashMap<>();
+        savedProjects.stream()
+                .filter(project -> project.getId() != null)
+                .forEach(project -> contributorsByProjectId.put(
+                        project.getId(),
+                        contributorRepository.findByProjectIdOrderByNameAsc(project.getId())));
+        List<String> contributorEmails = contributorsByProjectId.values().stream()
+                .flatMap(List::stream)
+                .map(ProjectContributor::getEmail)
+                .filter(email -> email != null && !email.isBlank())
+                .map(email -> email.trim().toLowerCase(java.util.Locale.ROOT))
+                .distinct()
+                .toList();
+        Map<String, UserProfile> userProfilesByEmail = new LinkedHashMap<>();
+        if (!contributorEmails.isEmpty()) {
+            userProfileRepository.findByEmailIgnoreCaseIn(contributorEmails).stream()
+                    .filter(profile -> profile.getEmail() != null)
+                    .forEach(profile -> userProfilesByEmail.put(
+                            profile.getEmail().trim().toLowerCase(java.util.Locale.ROOT), profile));
+        }
 
         for (Project project : savedProjects) {
             cardsByName.put(project.getName(), new LinkedHashMap<>());
@@ -786,6 +1154,7 @@ public class ExpenseController {
                     card.put("name", entry.getKey());
                     card.putIfAbsent("total", BigDecimal.ZERO);
                     card.putIfAbsent("count", 0);
+                    card.putIfAbsent("closed", false);
                     Project savedProject = savedProjects.stream()
                             .filter(project -> entry.getKey().equals(project.getName()))
                             .findFirst()
@@ -793,13 +1162,48 @@ public class ExpenseController {
                     if (savedProject != null) {
                         card.put("id", savedProject.getId());
                         card.put("ownerSubject", savedProject.getOwnerSubject());
-                        card.put("ownerName", savedProject.getOwnerName());
+                        card.put("closed", savedProject.isClosed());
+                        card.put("canAddExpense",
+                                hasExpenseWriteAccess(savedProject, ownerSubject, userEmail));
                         UserProfile ownerProfile = userProfiles.get(savedProject.getOwnerSubject());
-                        String profileImageUrl = ownerProfile == null ? null : ownerProfile.getImageUrl();
-                        card.put("ownerImageUrl", profileImageUrl == null || profileImageUrl.isBlank()
-                                ? savedProject.getOwnerImageUrl()
-                                : profileImageUrl);
-                        card.put("contributors", contributorRepository.findByProjectIdOrderByNameAsc(savedProject.getId()));
+                        String ownerName = ownerProfile == null ? null : ownerProfile.getDisplayName();
+                        card.put("ownerName", ownerName == null || ownerName.isBlank()
+                                ? getUsernamePlaceholder()
+                                : ownerName);
+                        String ownerImageUrl = ownerProfile == null ? null : ownerProfile.getImageUrl();
+                        card.put("ownerImageUrl", ownerImageUrl == null ? "" : ownerImageUrl);
+                        List<ProjectContributor> contributors = contributorsByProjectId.getOrDefault(
+                                savedProject.getId(), List.of());
+                        card.put("contributors", contributors);
+                        Map<Long, String> contributorImageUrls = new LinkedHashMap<>();
+                        Map<Long, String> contributorDisplayNames = new LinkedHashMap<>();
+                        contributors.forEach(contributor -> {
+                            String email = contributor.getEmail();
+                            UserProfile contributorProfile = email == null
+                                    ? null
+                                    : userProfilesByEmail.get(email.trim().toLowerCase(java.util.Locale.ROOT));
+                            String imageUrl = contributorProfile == null ? null : contributorProfile.getImageUrl();
+                            String displayName = contributorProfile == null
+                                    ? null
+                                    : contributorProfile.getDisplayName();
+                            if (imageUrl == null || imageUrl.isBlank()) {
+                                imageUrl = contributor.getImageUrl();
+                            }
+                            if (displayName == null || displayName.isBlank()) {
+                                displayName = contributor.getName();
+                            }
+                            if (displayName == null || displayName.isBlank()) {
+                                displayName = email;
+                            }
+                            if (contributor.getId() != null) {
+                                contributorDisplayNames.put(contributor.getId(), displayName);
+                                if (imageUrl != null && !imageUrl.isBlank()) {
+                                    contributorImageUrls.put(contributor.getId(), imageUrl);
+                                }
+                            }
+                        });
+                        card.put("contributorImageUrls", contributorImageUrls);
+                        card.put("contributorDisplayNames", contributorDisplayNames);
                         List<Expense> projectExpenses = expenses.stream()
                                 .filter(expense -> savedProject.getId().equals(expense.getProjectId())
                                         || (expense.getProjectId() == null
@@ -855,6 +1259,8 @@ public class ExpenseController {
                         card.put("ownerName", getUsernamePlaceholder());
                         card.put("ownerImageUrl", "");
                         card.put("contributors", List.of());
+                        card.put("canAddExpense", false);
+                        card.put("contributorImageUrls", Map.of());
                         card.put("budgetLines", List.of());
                         card.put("budgetTotal", null);
                         card.put("budgetRemaining", null);

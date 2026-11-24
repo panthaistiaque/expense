@@ -18,9 +18,7 @@ public class Project {
 
     private String ownerSubject;
 
-    private String ownerName;
-
-    private String ownerImageUrl;
+    private Boolean closed = false;
 
     public Project() {
     }
@@ -49,19 +47,11 @@ public class Project {
         this.ownerSubject = ownerSubject;
     }
 
-    public String getOwnerName() {
-        return ownerName;
+    public boolean isClosed() {
+        return Boolean.TRUE.equals(closed);
     }
 
-    public void setOwnerName(String ownerName) {
-        this.ownerName = ownerName;
-    }
-
-    public String getOwnerImageUrl() {
-        return ownerImageUrl;
-    }
-
-    public void setOwnerImageUrl(String ownerImageUrl) {
-        this.ownerImageUrl = ownerImageUrl;
+    public void setClosed(boolean closed) {
+        this.closed = closed;
     }
 }

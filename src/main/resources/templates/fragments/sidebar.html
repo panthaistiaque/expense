@@ -1,0 +1,38 @@
+<div xmlns:th="http://www.thymeleaf.org" th:fragment="workspaceSidebar(activePage)">
+    <aside class="sidebar bg-white border-end position-fixed d-none d-md-block">
+        <div class="p-3">
+            <div class="sidebar-label px-3 mb-2 mt-1">Workspace</div>
+            <nav class="nav nav-pills flex-column gap-1" aria-label="Workspace navigation">
+                <a class="nav-link" th:classappend="${activePage == 'dashboard'} ? 'active'"
+                   th:attr="aria-current=${activePage == 'dashboard'} ? 'page' : null" href="/dashboard">Dashboard</a>
+                <a class="nav-link" th:classappend="${activePage == 'expenses'} ? 'active'"
+                   th:attr="aria-current=${activePage == 'expenses'} ? 'page' : null" href="/expenses">Expenses</a>
+                <a class="nav-link" th:classappend="${activePage == 'projects'} ? 'active'"
+                   th:attr="aria-current=${activePage == 'projects'} ? 'page' : null" href="/projects">Projects</a>
+                <a class="nav-link" th:classappend="${activePage == 'categories'} ? 'active'"
+                   th:attr="aria-current=${activePage == 'categories'} ? 'page' : null" href="/categories">Categories</a>
+                <a class="nav-link" th:if="${databaseSearchAllowed}"
+                   th:classappend="${activePage == 'db-search'} ? 'active'"
+                   th:attr="aria-current=${activePage == 'db-search'} ? 'page' : null"
+                   href="/db-search">DB Search</a>
+            </nav>
+        </div>
+    </aside>
+
+    <aside class="offcanvas offcanvas-start" tabindex="-1" id="sidebarMenu" aria-labelledby="sidebarMenuLabel">
+        <div class="offcanvas-header">
+            <h2 class="offcanvas-title fs-5" id="sidebarMenuLabel">Menu</h2>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+        </div>
+        <div class="offcanvas-body">
+            <nav class="nav nav-pills flex-column gap-1" aria-label="Workspace navigation">
+                <a class="nav-link" th:classappend="${activePage == 'dashboard'} ? 'active'" href="/dashboard">Dashboard</a>
+                <a class="nav-link" th:classappend="${activePage == 'expenses'} ? 'active'" href="/expenses">Expenses</a>
+                <a class="nav-link" th:classappend="${activePage == 'projects'} ? 'active'" href="/projects">Projects</a>
+                <a class="nav-link" th:classappend="${activePage == 'categories'} ? 'active'" href="/categories">Categories</a>
+                <a class="nav-link" th:if="${databaseSearchAllowed}"
+                   th:classappend="${activePage == 'db-search'} ? 'active'" href="/db-search">DB Search</a>
+            </nav>
+        </div>
+    </aside>
+</div>
