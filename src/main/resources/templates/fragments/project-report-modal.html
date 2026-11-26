@@ -1,0 +1,81 @@
+<div xmlns:th="http://www.thymeleaf.org"
+     class="modal fade" id="projectReportModal" tabindex="-1"
+     aria-labelledby="projectReportTitle" aria-hidden="true"
+     th:fragment="projectReportModal">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content border-0 rounded-4 shadow">
+            <div class="modal-header border-0">
+                <div>
+                    <div class="small text-muted">Project report</div>
+                    <h2 class="modal-title fs-5 fw-bold" id="projectReportTitle">Expense report</h2>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body pt-0">
+                <div class="table-responsive border rounded-3">
+                    <table class="table table-hover align-middle mb-0" style="table-layout: fixed">
+                        <colgroup>
+                            <col style="width: 5%">
+                            <col style="width: 18%">
+                            <col style="width: 43%">
+                            <col style="width: 17%">
+                            <col style="width: 17%">
+                        </colgroup>
+                        <thead class="table-light">
+                        <tr>
+                            <th scope="col">SL</th>
+                            <th scope="col">Date</th>
+                            <th scope="col">Details</th>
+                            <th scope="col" class="text-end">Amount</th>
+                            <th scope="col" class="text-end">% of total</th>
+                        </tr>
+                        </thead>
+                        <tbody id="projectReportRows"></tbody>
+                        <tfoot class="table-light fw-bold" id="projectReportFooter">
+                        <tr>
+                            <td colspan="3">Total</td>
+                            <td class="text-end" id="projectReportTotalAmount">0.00</td>
+                            <td class="text-end" id="projectReportTotalPercent">100.00%</td>
+                        </tr>
+                        </tfoot>
+                    </table>
+                </div>
+                <div id="projectReportEmpty" class="text-center text-muted py-5 d-none">
+                    No expenses have been recorded for this project.
+                </div>
+            </div>
+            <div class="modal-footer border-0">
+                <button type="button" class="btn btn-primary" id="printProjectReport">Print report</button>
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+    <style>
+        @media print {
+            body * { visibility: hidden !important; }
+            #projectReportModal, #projectReportModal * { visibility: visible !important; }
+            #projectReportModal {
+                display: block !important;
+                position: absolute !important;
+                inset: 0 auto auto 0 !important;
+                width: 100% !important;
+                height: auto !important;
+                overflow: visible !important;
+                background: #fff !important;
+            }
+            #projectReportModal .modal-dialog {
+                width: 100% !important;
+                max-width: none !important;
+                margin: 0 !important;
+            }
+            #projectReportModal .modal-content { border: 0 !important; box-shadow: none !important; }
+            #projectReportModal .btn-close,
+            #projectReportModal .modal-footer { display: none !important; }
+            #projectReportModal .modal-body { overflow: visible !important; }
+            #projectReportModal table { width: 100% !important; border-collapse: collapse !important; }
+            #projectReportModal th, #projectReportModal td { border: 1px solid #777 !important; }
+            #projectReportModal thead { display: table-header-group; }
+            #projectReportModal tr { break-inside: avoid; }
+        }
+    </style>
+</div>

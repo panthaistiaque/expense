@@ -6,6 +6,7 @@ import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import org.springframework.stereotype.Controller;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.ui.Model;
 import org.springframework.validation.BindingResult;
 import org.springframework.security.core.Authentication;
@@ -45,6 +46,7 @@ public class ExpenseController {
     private final ExpenseCategoryRepository categoryRepository;
     private final ProjectCategoryBudgetRepository categoryBudgetRepository;
     private final ProjectCategoryBudgetItemRepository budgetItemRepository;
+    private final ProjectDepositRepository depositRepository;
 
     public ExpenseController(ExpenseRepository expenseRepository,
                              ProjectRepository projectRepository,
@@ -53,6 +55,19 @@ public class ExpenseController {
                              ExpenseCategoryRepository categoryRepository,
                              ProjectCategoryBudgetRepository categoryBudgetRepository,
                              ProjectCategoryBudgetItemRepository budgetItemRepository) {
+        this(expenseRepository, projectRepository, contributorRepository, userProfileRepository,
+                categoryRepository, categoryBudgetRepository, budgetItemRepository, null);
+    }
+
+    @Autowired
+    public ExpenseController(ExpenseRepository expenseRepository,
+                             ProjectRepository projectRepository,
+                             ProjectContributorRepository contributorRepository,
+                             UserProfileRepository userProfileRepository,
+                             ExpenseCategoryRepository categoryRepository,
+                             ProjectCategoryBudgetRepository categoryBudgetRepository,
+                             ProjectCategoryBudgetItemRepository budgetItemRepository,
+                             ProjectDepositRepository depositRepository) {
         this.expenseRepository = expenseRepository;
         this.projectRepository = projectRepository;
         this.contributorRepository = contributorRepository;
@@ -60,6 +75,7 @@ public class ExpenseController {
         this.categoryRepository = categoryRepository;
         this.categoryBudgetRepository = categoryBudgetRepository;
         this.budgetItemRepository = budgetItemRepository;
+        this.depositRepository = depositRepository;
     }
 
     @GetMapping("/")
@@ -640,7 +656,7 @@ public class ExpenseController {
                 total += percent;
             }
             if (total != 100) {
-                redirectAttributes.addFlashAttribute("errorMessage", "Expense shares must add up to 100%.");
+                redirectAttributes.addFlashAttribute("errorMessage", "Project expense shares must add up to 100%.");
                 return "redirect:/projects";
             }
         } catch (NumberFormatException exception) {
@@ -653,6 +669,98 @@ public class ExpenseController {
         shares.forEach(ProjectContributor::setExpenseSharePercent);
         contributorRepository.saveAll(shares.keySet());
         redirectAttributes.addFlashAttribute("successMessage", "Project expense split rule saved.");
+        return "redirect:/projects";
+    }
+
+    @PostMapping("/projects/{id}/deposits")
+    public String recordProjectDeposit(@PathVariable Long id,
+                                       @RequestParam Long contributorId,
+                                       @RequestParam String amount,
+                                       @RequestParam String depositDate,
+                                       @RequestParam(defaultValue = "") String details,
+                                       Authentication authentication,
+                                       RedirectAttributes redirectAttributes) {
+        String ownerSubject = getOwnerSubject(authentication);
+        Project project = projectRepository.findById(id).orElse(null);
+        if (project == null || !Objects.equals(ownerSubject, project.getOwnerSubject())) {
+            redirectAttributes.addFlashAttribute("errorMessage", "Only the project owner can record deposits.");
+            return "redirect:/projects";
+        }
+        if (project.isClosed()) {
+            redirectAttributes.addFlashAttribute("errorMessage", "Closed projects are read-only. Reopen the project first.");
+            return "redirect:/projects";
+        }
+        ProjectContributor contributor = contributorRepository.findById(contributorId).orElse(null);
+        if (contributor == null || contributor.getProject() == null
+                || !id.equals(contributor.getProject().getId())) {
+            redirectAttributes.addFlashAttribute("errorMessage", "Select a contributor from this project.");
+            return "redirect:/projects";
+        }
+        BigDecimal parsedAmount;
+        LocalDate parsedDate;
+        try {
+            if (amount == null || !amount.matches("\\d{1,12}(\\.\\d{1,2})?")) {
+                throw new NumberFormatException();
+            }
+            parsedAmount = new BigDecimal(amount);
+            parsedDate = LocalDate.parse(depositDate);
+            if (parsedAmount.signum() <= 0) throw new NumberFormatException();
+        } catch (RuntimeException exception) {
+            redirectAttributes.addFlashAttribute("errorMessage", "Enter a valid positive amount and deposit date.");
+            return "redirect:/projects";
+        }
+        String normalizedDetails = details == null ? "" : details.trim();
+        if (normalizedDetails.length() > 500) {
+            redirectAttributes.addFlashAttribute("errorMessage", "Deposit details must be 500 characters or fewer.");
+            return "redirect:/projects";
+        }
+        ProjectDeposit deposit = new ProjectDeposit();
+        deposit.setProjectId(id);
+        deposit.setContributorId(contributor.getId());
+        String displayName = contributor.getEmail() == null ? null
+                : userProfileRepository.findByEmailIgnoreCaseIn(List.of(contributor.getEmail())).stream()
+                        .map(UserProfile::getDisplayName)
+                        .filter(name -> name != null && !name.isBlank())
+                        .findFirst().orElse(null);
+        deposit.setContributorName(displayName == null
+                ? (contributor.getName() == null || contributor.getName().isBlank()
+                        ? contributor.getEmail() : contributor.getName())
+                : displayName);
+        deposit.setAmount(parsedAmount.setScale(2));
+        deposit.setDepositDate(parsedDate);
+        deposit.setDetails(normalizedDetails);
+        deposit.setRecordedBy(ownerSubject);
+        if (depositRepository != null) depositRepository.save(deposit);
+        redirectAttributes.addFlashAttribute("successMessage", "Contributor deposit recorded.");
+        return "redirect:/projects";
+    }
+
+    @PostMapping("/projects/{id}/deposits/{depositId}/delete")
+    public String deleteProjectDeposit(@PathVariable Long id,
+                                       @PathVariable Long depositId,
+                                       Authentication authentication,
+                                       RedirectAttributes redirectAttributes) {
+        String ownerSubject = getOwnerSubject(authentication);
+        Project project = projectRepository.findById(id).orElse(null);
+        if (project == null || !Objects.equals(ownerSubject, project.getOwnerSubject())) {
+            redirectAttributes.addFlashAttribute("errorMessage", "Only the project owner can delete deposits.");
+            return "redirect:/projects";
+        }
+        if (project.isClosed()) {
+            redirectAttributes.addFlashAttribute("errorMessage", "Closed projects are read-only. Reopen the project first.");
+            return "redirect:/projects";
+        }
+        if (depositRepository == null) {
+            redirectAttributes.addFlashAttribute("errorMessage", "Deposit storage is unavailable.");
+            return "redirect:/projects";
+        }
+        ProjectDeposit deposit = depositRepository.findById(depositId).orElse(null);
+        if (deposit == null || !id.equals(deposit.getProjectId())) {
+            redirectAttributes.addFlashAttribute("errorMessage", "Deposit not found in this project.");
+            return "redirect:/projects";
+        }
+        depositRepository.delete(deposit);
+        redirectAttributes.addFlashAttribute("successMessage", "Deposit deleted.");
         return "redirect:/projects";
     }
 
@@ -1224,6 +1332,13 @@ public class ExpenseController {
                         List<ProjectContributor> contributors = contributorsByProjectId.getOrDefault(
                                 savedProject.getId(), List.of());
                         card.put("contributors", contributors);
+                        List<ProjectDeposit> projectDeposits = depositRepository == null
+                                ? List.of()
+                                : depositRepository.findByProjectIdOrderByDepositDateDescIdDesc(savedProject.getId());
+                        card.put("deposits", projectDeposits);
+                        BigDecimal totalDeposits = projectDeposits.stream().map(ProjectDeposit::getAmount)
+                                .reduce(BigDecimal.ZERO, BigDecimal::add);
+                        card.put("depositTotal", totalDeposits);
                         Map<Long, String> contributorImageUrls = new LinkedHashMap<>();
                         Map<Long, String> contributorDisplayNames = new LinkedHashMap<>();
                         contributors.forEach(contributor -> {
@@ -1251,6 +1366,18 @@ public class ExpenseController {
                                 }
                             }
                         });
+                        Map<Long, BigDecimal> depositsByContributor = new LinkedHashMap<>();
+                        for (ProjectDeposit deposit : projectDeposits) {
+                            ProjectContributor matchedContributor = contributors.stream()
+                                    .filter(contributor -> deposit.getContributorId() != null
+                                            ? deposit.getContributorId().equals(contributor.getId())
+                                            : matchesDepositContributor(deposit, contributor,
+                                                    contributorDisplayNames.get(contributor.getId())))
+                                    .findFirst().orElse(null);
+                            if (matchedContributor != null) {
+                                depositsByContributor.merge(matchedContributor.getId(), deposit.getAmount(), BigDecimal::add);
+                            }
+                        }
                         card.put("contributorImageUrls", contributorImageUrls);
                         card.put("contributorDisplayNames", contributorDisplayNames);
                         List<Expense> projectExpenses = expenses.stream()
@@ -1258,6 +1385,33 @@ public class ExpenseController {
                                         || (expense.getProjectId() == null
                                         && savedProject.getName().equals(expense.getProjectName())))
                                 .toList();
+                        List<Map<String, Object>> reportRows = projectExpenses.stream()
+                                .filter(expense -> expense.getExpenseDate() != null)
+                                .collect(java.util.stream.Collectors.groupingBy(
+                                        Expense::getExpenseDate,
+                                        () -> new java.util.TreeMap<LocalDate, List<Expense>>(Comparator.reverseOrder()),
+                                        java.util.stream.Collectors.toList()))
+                                .entrySet().stream()
+                                .map(dateEntry -> {
+                                    Map<String, BigDecimal> categoryTotals = new java.util.TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+                                    dateEntry.getValue().forEach(expense -> categoryTotals.merge(
+                                            expense.getCategory() == null || expense.getCategory().isBlank()
+                                                    ? "Uncategorized" : expense.getCategory(),
+                                            expense.getAmount(), BigDecimal::add));
+                                    List<Map<String, Object>> details = categoryTotals.entrySet().stream()
+                                            .map(categoryEntry -> Map.<String, Object>of(
+                                                    "category", categoryEntry.getKey(),
+                                                    "amount", categoryEntry.getValue()))
+                                            .toList();
+                                    BigDecimal dateTotal = dateEntry.getValue().stream()
+                                            .map(Expense::getAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
+                                    return Map.<String, Object>of(
+                                            "date", dateEntry.getKey(),
+                                            "total", dateTotal,
+                                            "details", details);
+                                })
+                                .toList();
+                        card.put("reportRows", reportRows);
                         BigDecimal projectTotal = projectExpenses.stream()
                                 .map(Expense::getAmount)
                                 .reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -1287,6 +1441,7 @@ public class ExpenseController {
                                 "count", 0)));
                         contributions.get("subject:" + projectOwnerSubject)
                                 .put("sharePercent", savedProject.getOwnerExpenseSharePercent());
+                        contributions.get("subject:" + projectOwnerSubject).put("isProjectOwner", true);
                         contributors.forEach(contributor -> {
                             String email = contributor.getEmail();
                             UserProfile contributorProfile = email == null
@@ -1310,6 +1465,10 @@ public class ExpenseController {
                             Map<String, Object> participant = contributions.get(key);
                             participant.put("sharePercent", (Integer) participant.getOrDefault("sharePercent", 0)
                                     + contributor.getExpenseSharePercent());
+                            participant.putIfAbsent("isProjectOwner", false);
+                            participant.put("depositAmount", ((BigDecimal) participant.getOrDefault(
+                                    "depositAmount", BigDecimal.ZERO)).add(
+                                    depositsByContributor.getOrDefault(contributor.getId(), BigDecimal.ZERO)));
                         });
                         projectExpenses.forEach(expense -> {
                             String subject = expense.getOwnerSubject();
@@ -1334,6 +1493,8 @@ public class ExpenseController {
                                 row.put("amount", BigDecimal.ZERO);
                                 row.put("count", 0);
                                 row.put("sharePercent", 0);
+                                row.put("depositAmount", BigDecimal.ZERO);
+                                row.put("isProjectOwner", false);
                                 return row;
                             });
                             contribution.put("amount",
@@ -1381,10 +1542,15 @@ public class ExpenseController {
                                 .toList();
                         card.put("budgetLines", budgetLines);
                         List<Map<String, Object>> settlements = new java.util.ArrayList<>();
+                        List<Map<String, Object>> settlementBreakdown = new java.util.ArrayList<>();
                         List<Map<String, Object>> debtors = new java.util.ArrayList<>();
                         List<Map<String, Object>> creditors = new java.util.ArrayList<>();
+                        int totalExpenseSharePercent = accountingContributors.stream()
+                                .mapToInt(person -> (Integer) person.getOrDefault("sharePercent", 0)).sum();
+                        boolean settlementRuleConfigured = totalExpenseSharePercent == 100;
                         List<Map<String, Object>> assignedShares = accountingContributors.stream()
-                                .filter(person -> ((Integer) person.getOrDefault("sharePercent", 0)) > 0)
+                                .filter(person -> settlementRuleConfigured
+                                        && ((Integer) person.getOrDefault("sharePercent", 0)) > 0)
                                 .map(person -> {
                                     BigDecimal exact = projectTotal.multiply(BigDecimal.valueOf(
                                             (Integer) person.getOrDefault("sharePercent", 0)))
@@ -1414,9 +1580,27 @@ public class ExpenseController {
                             Map<String, Object> person = (Map<String, Object>) row.get("person");
                             targetShares.put(person, (BigDecimal) row.get("share"));
                         });
-                        for (Map<String, Object> person : accountingContributors) {
+                        for (Map<String, Object> person : settlementRuleConfigured
+                                ? accountingContributors : List.<Map<String, Object>>of()) {
                             BigDecimal personShare = targetShares.getOrDefault(person, BigDecimal.ZERO);
-                            BigDecimal balance = ((BigDecimal) person.get("amount")).subtract(personShare);
+                            BigDecimal spent = (BigDecimal) person.get("amount");
+                            boolean projectOwner = Boolean.TRUE.equals(person.get("isProjectOwner"));
+                            BigDecimal participantDeposit = projectOwner ? BigDecimal.ZERO
+                                    : (BigDecimal) person.getOrDefault("depositAmount", BigDecimal.ZERO);
+                            BigDecimal paid = spent.add(participantDeposit);
+                            if (projectOwner) {
+                                paid = paid.subtract(totalDeposits);
+                            }
+                            BigDecimal balance = paid.subtract(personShare);
+                            Map<String, Object> breakdownRow = new LinkedHashMap<>();
+                            breakdownRow.put("name", person.get("name"));
+                            breakdownRow.put("spent", spent);
+                            breakdownRow.put("deposit", participantDeposit);
+                            breakdownRow.put("depositType", projectOwner ? "—" : "Paid");
+                            breakdownRow.put("sharePercent", person.getOrDefault("sharePercent", 0));
+                            breakdownRow.put("shareAmount", personShare);
+                            breakdownRow.put("balance", balance);
+                            settlementBreakdown.add(breakdownRow);
                             if (balance.signum() < 0) {
                                 debtors.add(new LinkedHashMap<>(Map.of("name", person.get("name"), "amount", balance.abs())));
                             } else if (balance.signum() > 0) {
@@ -1439,7 +1623,8 @@ public class ExpenseController {
                             if (owed.signum() == 0) creditorIndex++;
                         }
                         card.put("settlements", settlements);
-                        card.put("equalShareDisplay", BigDecimal.ZERO);
+                        card.put("settlementRuleConfigured", settlementRuleConfigured);
+                        card.put("settlementBreakdown", settlementBreakdown);
                         card.put("ownerExpenseSharePercent", savedProject.getOwnerExpenseSharePercent());
                         card.put("budgetTotal", categoryBudgets.isEmpty() ? null : budgetTotal);
                         card.put("budgetRemaining", categoryBudgets.isEmpty()
@@ -1461,6 +1646,11 @@ public class ExpenseController {
                         card.put("averageExpense", BigDecimal.ZERO);
                         card.put("accountingContributors", List.of());
                         card.put("settlements", List.of());
+                        card.put("settlementRuleConfigured", false);
+                        card.put("settlementBreakdown", List.of());
+                        card.put("reportRows", List.of());
+                        card.put("deposits", List.of());
+                        card.put("depositTotal", BigDecimal.ZERO);
                         card.put("contributors", List.of());
                         card.put("canAddExpense", false);
                         card.put("contributorImageUrls", Map.of());
@@ -1476,5 +1666,19 @@ public class ExpenseController {
 
     private String getUsernamePlaceholder() {
         return "Owner";
+    }
+
+    private boolean matchesDepositContributor(ProjectDeposit deposit,
+                                              ProjectContributor contributor,
+                                              String displayName) {
+        String depositName = normalizeComparableName(deposit.getContributorName());
+        return !depositName.isEmpty()
+                && (depositName.equals(normalizeComparableName(contributor.getEmail()))
+                || depositName.equals(normalizeComparableName(contributor.getName()))
+                || depositName.equals(normalizeComparableName(displayName)));
+    }
+
+    private String normalizeComparableName(String value) {
+        return value == null ? "" : value.trim().toLowerCase(java.util.Locale.ROOT);
     }
 }
